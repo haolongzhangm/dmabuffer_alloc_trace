@@ -1,0 +1,7 @@
+{
+global:
+    ioctl;
+    close;
+
+local: *;
+};
