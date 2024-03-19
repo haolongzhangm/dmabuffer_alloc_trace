@@ -131,7 +131,6 @@ public:
     }
 
     int ioctl(int __fd, unsigned int __request, ...) {
-        std::lock_guard<std::mutex> lock(m_mutex);
         va_list ap;
         va_start(ap, __request);
         void* arg = va_arg(ap, void*);
@@ -139,6 +138,7 @@ public:
         int ret = m_ioctl(__fd, __request, arg);
         //! show bactrace when __request is DMA_HEAP_IOCTL_ALLOC
         if (__request == DMA_HEAP_IOCTL_ALLOC) {
+            std::lock_guard<std::mutex> lock(m_mutex);
             struct dma_heap_allocation_data* heap_data =
                     (struct dma_heap_allocation_data*)arg;
             m_alloc_count++;
