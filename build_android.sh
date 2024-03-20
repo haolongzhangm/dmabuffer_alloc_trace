@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -ex
 
+BUILD_ARCH="arm64-v8a"
+if [ -n "$1" ]; then
+    BUILD_ARCH=$1
+fi
 
 SRC_DIR=$(readlink -f "`dirname $0`")
 cd ${SRC_DIR}
@@ -17,18 +21,49 @@ echo "check NDK is invalid or not..."
 if [ ! -f "$NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang++" ]; then
     echo "NDK_ROOT is invalid"
     exit 1
-else
-    echo "put $NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/ to PATH"
-    export PATH=$NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/:$PATH
 fi
 
-rm -rf out
-mkdir -p out/lib64
-mkdir -p out/lib32
+CMAKE_PARA_ANDROID="-DCMAKE_TOOLCHAIN_FILE=${NDK_ROOT}/build/cmake/android.toolchain.cmake \
+	-DANDROID_NDK=${NDK_ROOT} \
+    -DANDROID_ABI=arm64-v8a \
+    -DANDROID_TOOLCHAIN=clang++ \
+    -DANDROID_PLATFORM=android-28"
 
-# build for android aarch64
-echo "build for android aarch64"
-bear -- aarch64-linux-android21-clang++ dma_alloc_hook.cpp -std=c++17 -g -O3 -static-libstdc++ -Iaosp_file/aosp_header/include/ -Iopencl-stub/include -lutilscallstack -lutils -Laosp_file/lib64/ -fPIC -shared -o out/lib64/libdma_alloc_hook.cpp.so -Wl,--version-script=version_script.ld
+CMAKE_PARA_ARMV7="-DCMAKE_TOOLCHAIN_FILE=${NDK_ROOT}/build/cmake/android.toolchain.cmake \
+    -DANDROID_NDK=${NDK_ROOT} \
+    -DANDROID_ABI=armeabi-v7a \
+    -DANDROID_TOOLCHAIN=clang++ \
+    -DANDROID_PLATFORM=android-28"
 
-echo "build for android armv7a"
-armv7a-linux-androideabi21-clang++ dma_alloc_hook.cpp -std=c++17 -g -O3 -static-libstdc++ -Iaosp_file/aosp_header/include/ -Iopencl-stub/include -lutilscallstack -lutils -Laosp_file/lib/ -fPIC -shared -o out/lib32/libdma_alloc_hook.cpp.so -Wl,--version-script=version_script.ld
+CMAKE_PARA=" -DCMAKE_INSTALL_PREFIX=${SRC_DIR} \
+    -DCMAKE_BUILD_TYPE=Release "
+
+function cmake_para_gen(){ 
+    case ${BUILD_ARCH} in
+        "arm64-v8a")
+            CMAKE_PARA="${CMAKE_PARA} ${CMAKE_PARA_ANDROID}"
+            ;;
+        "armeabi-v7a")
+            CMAKE_PARA="${CMAKE_PARA} ${CMAKE_PARA_ARMV7}"
+            ;;
+        *)
+            echo "BUILD_ARCH must be either 'arm64-v8a' or 'armeabi-v7a'"
+            exit 1
+            ;;
+    esac
+}
+
+function build_sdk(){ 
+    rm -rf build
+    rm -rf out
+    mkdir -p out/lib
+    mkdir build && cd build
+
+    cmake ${CMAKE_PARA} .. 
+    # make -j VERBOSE=1
+    make install # 添加安装步骤
+    cp compile_commands.json ../out/
+}
+
+cmake_para_gen
+build_sdk
