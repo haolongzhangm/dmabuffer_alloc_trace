@@ -11,10 +11,12 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 endif()
 
 add_subdirectory(aosp_file)
+add_subdirectory(backtrace_helper)
 
 # 添加 .so
-add_library(dma_alloc_hook SHARED ${CMAKE_SOURCE_DIR}/src/dma_alloc_hook.cpp)
+file(GLOB SRC_FILES ${CMAKE_SOURCE_DIR}/src/*.cpp)
+add_library(alloc_hook SHARED ${SRC_FILES})
 # 链接需要的库和头文件
-target_link_libraries(dma_alloc_hook PRIVATE backtrace_header)
+target_link_libraries(alloc_hook PRIVATE backtrace_helper)
 # 安装到 out/lib 目录
-install(TARGETS dma_alloc_hook DESTINATION ${CMAKE_INSTALL_PREFIX}/out/lib)
+install(TARGETS alloc_hook DESTINATION ${CMAKE_INSTALL_PREFIX}/out/lib)
