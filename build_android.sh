@@ -36,7 +36,7 @@ CMAKE_PARA_ARMV7="-DCMAKE_TOOLCHAIN_FILE=${NDK_ROOT}/build/cmake/android.toolcha
     -DANDROID_PLATFORM=android-28"
 
 CMAKE_PARA=" -DCMAKE_INSTALL_PREFIX=${SRC_DIR} \
-    -DCMAKE_BUILD_TYPE=Release "
+    -DCMAKE_BUILD_TYPE=Release -G Ninja"
 
 function cmake_para_gen(){ 
     case ${BUILD_ARCH} in
@@ -60,9 +60,7 @@ function build_sdk(){
     mkdir build && cd build
 
     cmake ${CMAKE_PARA} .. 
-    # make -j VERBOSE=1
-    make install # 添加安装步骤
-    cp compile_commands.json ../out/
+    ninja install -v
 }
 
 cmake_para_gen
