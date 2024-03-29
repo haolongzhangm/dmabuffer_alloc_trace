@@ -3,7 +3,7 @@
 #include <string>
 #include <chrono>
 #include <map>
-#include <mutex>
+#include <atomic>
 #include <cstdlib>
 
 #ifndef LOG
@@ -24,6 +24,28 @@
         __builtin_trap();           \
     } while (0)
 
+#define TOKENPASTE(x, y) x##y
+#define TOKENPASTE2(x, y) TOKENPASTE(x, y)
+#define LOCK_GUARD_CTOR(mtx) TOKENPASTE2(__lock_guard_, __LINE__)(mtx)
+#define LOCK_GUARD(mtx) std::lock_guard<decltype(mtx)> LOCK_GUARD_CTOR(mtx)
+
+class NonCopyable {
+    NonCopyable(const NonCopyable&) = delete;
+    NonCopyable& operator=(const NonCopyable&) = delete;
+
+public:
+    NonCopyable() = default;
+};
+
+class Spinlock : public NonCopyable {
+    std::atomic_flag m_state = ATOMIC_FLAG_INIT;
+
+public:
+    void lock() {
+        while (m_state.test_and_set(std::memory_order_acquire));
+    }
+    void unlock() { m_state.clear(std::memory_order_release); }
+};
 namespace debug {
 // 定义一个结构体来存储堆栈信息
 struct CallStackInfo {
@@ -85,7 +107,7 @@ private:
 private:
     std::map<void*, MemBlock> m_host_info;
     std::map<int, MemBlock> m_dma_info;
-    std::mutex m_mutex;
+    Spinlock m_mutex;
     size_t m_dma_used = 0;
     size_t m_dma_peak = 0;
     size_t m_host_used = 0;

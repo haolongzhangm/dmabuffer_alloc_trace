@@ -126,7 +126,7 @@ bool Record::check_and_create_file(const std::string& filename) {
 }
 
 void Record::update_host(void* ptr, size_t size, bool flag) {
-    std::lock_guard<std::mutex> lock(m_mutex);
+    LOCK_GUARD(m_mutex);
     if (flag) { // 分配内存
         m_host_used += size;
         m_host_peak = std::max(m_host_peak, m_host_used);
@@ -147,7 +147,7 @@ void Record::update_host(void* ptr, size_t size, bool flag) {
 }
 
 void Record::update_dma(int fd, size_t len, bool flag) {
-    std::lock_guard<std::mutex> lock(m_mutex);
+    LOCK_GUARD(m_mutex);
     if (flag) { // 分配内存
         m_dma_used += len;
         m_dma_peak = std::max(m_dma_peak, m_dma_used);

@@ -1,28 +1,10 @@
-
-
 #include <dlfcn.h>
 #include <pthread.h>
 #include <cstring>
-#include <atomic>
 
 #include "backtrace_helper/backtrace.h"
 
-static std::atomic_bool live(false);
-static void* (*m_sys_malloc)(size_t);
-static void (*m_sys_free)(void*);
-static void* (*m_sys_calloc)(size_t, size_t);
-static void* (*m_sys_realloc)(void*, size_t);
-static int (*m_sys_posix_memalign)(void**, size_t, size_t);
-
-class NonCopyable {
-    NonCopyable(const NonCopyable&) = delete;
-    NonCopyable& operator=(const NonCopyable&) = delete;
-
-public:
-    NonCopyable() = default;
-};
-
-class AllocHook : public NonCopyable {
+class AllocHook {
     //! thread-local storage, 防止递归调用
     struct Tls {
         size_t recur_depth = 0;
@@ -34,11 +16,11 @@ class AllocHook : public NonCopyable {
             }
         }
     };
-  
+
     class MarkRecursive {
         Tls* m_tls;
 
-        public:
+    public:
         explicit MarkRecursive(Tls* tls) : m_tls{tls} { ++tls->recur_depth; }
         ~MarkRecursive() { --m_tls->recur_depth; }
     };
@@ -47,29 +29,31 @@ class AllocHook : public NonCopyable {
     Tls* get_tls_if_enabled();
     static bool is_recursive(const Tls* tls) { return tls->recur_depth; }
 
+    void* (*m_sys_malloc)(size_t);
+    static void (*m_sys_free)(void*);
+    void* (*m_sys_calloc)(size_t, size_t);
+    void* (*m_sys_realloc)(void*, size_t);
+    int (*m_sys_posix_memalign)(void**, size_t, size_t);
+
     pthread_key_t m_tls_key;
     bool m_tls_key_valid = false;
 
 public:
     AllocHook();
-
     ~AllocHook();
 
-    void *malloc(size_t size);
-
+    void* malloc(size_t size);
     void free(void* ptr);
-
     void* calloc(size_t a, size_t b);
-
     void* realloc(void* ptr, size_t size);
-
     int posix_memalign(void** ptr, size_t alignment, size_t size);
-
     static AllocHook& inst();
 };
 
+// 定义静态成员变量
+void (*AllocHook::m_sys_free)(void*) = nullptr;
+
 AllocHook::AllocHook() {
-    live.store(true, std::memory_order_seq_cst);
 #define RESOLVE(name)                                                  \
     do {                                                               \
         auto addr = dlsym(RTLD_NEXT, #name);                           \
@@ -94,7 +78,6 @@ AllocHook::~AllocHook() {
     if (m_tls_key_valid) {
         pthread_key_delete(m_tls_key);
     }
-    live.store(false, std::memory_order_seq_cst);
 }
 
 AllocHook::Tls* AllocHook::get_tls() {
@@ -117,7 +100,7 @@ AllocHook::Tls* AllocHook::get_tls_if_enabled() {
 
 void* AllocHook::malloc(size_t size) {
     auto tls = get_tls_if_enabled();
-    if (!tls || !live.load()) {
+    if (!tls) {
         return m_sys_malloc(size);
     }
     MarkRecursive mr{tls};
@@ -128,7 +111,7 @@ void* AllocHook::malloc(size_t size) {
 
 void AllocHook::free(void* ptr) {
     auto tls = get_tls_if_enabled();
-    if (!tls || !live.load()) {
+    if (!tls) {
         // exit func
         return m_sys_free(ptr);
     }
@@ -139,18 +122,18 @@ void AllocHook::free(void* ptr) {
 
 void* AllocHook::calloc(size_t a, size_t b) {
     auto tls = get_tls_if_enabled();
-    if (!tls || !live.load()) { 
+    if (!tls) {
         return m_sys_calloc(a, b);
     }
     MarkRecursive mr{tls};
     void* ptr = m_sys_calloc(a, b);
-    debug::Record::get_instance().update_host(ptr, a*b, true);
+    debug::Record::get_instance().update_host(ptr, a * b, true);
     return ptr;
 }
 
 void* AllocHook::realloc(void* ptr, size_t size) {
     auto tls = get_tls_if_enabled();
-    if (!tls || !live.load()) { 
+    if (!tls) {
         return m_sys_realloc(ptr, size);
     }
     MarkRecursive mr{tls};
@@ -161,7 +144,7 @@ void* AllocHook::realloc(void* ptr, size_t size) {
 
 int AllocHook::posix_memalign(void** ptr, size_t alignment, size_t size) {
     auto tls = get_tls_if_enabled();
-    if (!tls || !live.load()) {
+    if (!tls) {
         return m_sys_posix_memalign(ptr, alignment, size);
     }
     MarkRecursive mr{tls};
@@ -175,7 +158,7 @@ AllocHook& AllocHook::inst() {
 }
 
 extern "C" {
-void *malloc(size_t size) {
+void* malloc(size_t size) {
     return AllocHook::inst().malloc(size);
 }
 
