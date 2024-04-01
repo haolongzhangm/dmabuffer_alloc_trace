@@ -47,11 +47,11 @@ BacktraceResult backtrace(unsigned int skip) {
             skip--;
             continue;
         }
-        if (line_stream >> info.m_index >> info.m_pc >> info.m_address >> info.m_directory) {
-            std::getline(line_stream, info.m_function);
-            process_call_info(info.m_function);
-            result.m_info.push_back(info);
-        }
+        // if (line_stream >> info.m_index >> info.m_pc >> info.m_address >> info.m_directory) {
+        //     std::getline(line_stream, info.m_function);
+        //     process_call_info(info.m_function);
+        //     result.m_info.push_back(info);
+        // }
     }
     return result;
 }
@@ -126,6 +126,9 @@ bool Record::check_and_create_file(const std::string& filename) {
 }
 
 void Record::update_host(void* ptr, size_t size, bool flag) {
+    if (is_dma_hook) {
+        return; // 在 DMA 钩子状态下，直接返回，不执行 update_host 的逻辑
+    }
     LOCK_GUARD(m_mutex);
     if (flag) { // 分配内存
         m_host_used += size;
@@ -133,14 +136,12 @@ void Record::update_host(void* ptr, size_t size, bool flag) {
         m_peak = std::max(m_peak, (m_host_used + m_dma_used));
         BacktraceResult result = backtrace(5);
         m_host_info.emplace(ptr, MemBlock(size, result));
-        get_json();
     }
     else { // 释放内存
         auto it = m_host_info.find(ptr);
         if (it != m_host_info.end()) {
             m_host_used -= it->second.m_size;
             it->second.set_end();
-            get_json();
             m_host_info.erase(it);
         }
     }
@@ -149,19 +150,23 @@ void Record::update_host(void* ptr, size_t size, bool flag) {
 void Record::update_dma(int fd, size_t len, bool flag) {
     LOCK_GUARD(m_mutex);
     if (flag) { // 分配内存
+        is_dma_hook = true; // 设置 DMA 钩子状态
         m_dma_used += len;
         m_dma_peak = std::max(m_dma_peak, m_dma_used);
-        m_peak = std::max(m_peak, (m_host_used + m_dma_used));
         BacktraceResult result = backtrace(5);
-        m_dma_info.emplace(fd, MemBlock(len, result));
-        get_json();
+        m_dma_info.emplace(fd, MemBlock(len));
+        if (m_peak < m_host_used + m_dma_used) {
+            m_peak = m_host_used + m_dma_used;
+            m_dma_copy.clear();
+            m_dma_copy = m_dma_info;
+        } 
+        is_dma_hook = false; // 恢复 DMA 钩子状态
     }
     else { // 释放内存
         auto it = m_dma_info.find(fd);
         if (it != m_dma_info.end()) {
             m_dma_used -= it->second.m_size;
             it->second.set_end();
-            get_json();
             m_dma_info.erase(it);
         }
     }
@@ -199,9 +204,9 @@ void Record::get_json() {
     output_file << "\t\"data\": [\n";
     bool last_item = true;  // 用于确定是否是末尾元素
     // 处理 HOST 内存
-    write_mem_info(output_file, m_host_info, "Address", last_item);
+    // write_mem_info(output_file, m_host_info, "Address", last_item);
     // 处理 DMA 内存
-    write_mem_info(output_file, m_dma_info, "FD", last_item);
+    write_mem_info(output_file, m_dma_copy, "FD", last_item);
     output_file << "\n\t],\n";
     output_file << "\t\"peak\":" << m_peak << "\n";
     output_file << "}]";

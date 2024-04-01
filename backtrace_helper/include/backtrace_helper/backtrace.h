@@ -5,6 +5,8 @@
 #include <map>
 #include <atomic>
 #include <cstdlib>
+#include <dlfcn.h>
+#include <thread>
 
 #ifndef LOG
 #define LOG(fmt...) \
@@ -28,6 +30,8 @@
 #define TOKENPASTE2(x, y) TOKENPASTE(x, y)
 #define LOCK_GUARD_CTOR(mtx) TOKENPASTE2(__lock_guard_, __LINE__)(mtx)
 #define LOCK_GUARD(mtx) std::lock_guard<decltype(mtx)> LOCK_GUARD_CTOR(mtx)
+
+static thread_local bool is_dma_hook = false;
 
 class NonCopyable {
     NonCopyable(const NonCopyable&) = delete;
@@ -88,6 +92,79 @@ struct MemBlock {
     void set_end() { m_end = std::chrono::high_resolution_clock::now(); }
 };
 
+template<typename T>
+class SysAlloc {
+public:
+    typedef size_t     size_type;
+    typedef ptrdiff_t  difference_type;
+    typedef T*         pointer;
+    typedef const T*   const_pointer;
+    typedef T&         reference;
+    typedef const T&   const_reference;
+    typedef T          value_type;
+
+    template<typename X>
+    struct rebind
+    { typedef SysAlloc<X> other; };
+
+    SysAlloc() throw() {
+        #define RESOLVE(name)                                                  \
+            do {                                                               \
+                auto addr = dlsym(RTLD_NEXT, #name);                           \
+                if (!addr) {                                                   \
+                    FAIL_EXIT("can not resolve %s: %s", #name, dlerror());     \
+                }                                                              \
+                sys_##name = reinterpret_cast<decltype(sys_##name)>(addr); \
+            } while (0)
+            RESOLVE(malloc);
+            RESOLVE(free);
+        #undef RESOLVE
+    }
+
+    template<typename X>
+    SysAlloc(const SysAlloc<X>&) throw() {}
+
+    SysAlloc(const SysAlloc&) = delete;
+    void operator=(const SysAlloc&) = delete;
+
+    ~SysAlloc() throw() {};
+
+    pointer address(reference x) const { return &x; }
+    const_pointer address(const_reference x) const { return &x; }
+
+    pointer allocate(size_type n, const void * hint = 0) {
+        if (n > max_size()) {
+            FAIL_EXIT("Requested memory size exceeds maximum allowed size");
+        }
+
+        void* p = sys_malloc(n * sizeof(T));
+        if (!p) {
+            FAIL_EXIT("bad alloc");
+        }
+        return static_cast<pointer>(p);
+    }
+
+    void deallocate(pointer p, size_type) { sys_free(p); }
+    void construct(pointer p, const value_type& x) { new(p) value_type(x); }
+    void destroy(pointer p) { p->~value_type(); }
+
+private:
+    size_type max_size() const throw() { return size_t(-1) / sizeof(T); }
+
+    void* (*sys_malloc)(size_t);
+    void (*sys_free)(void*);
+};
+
+template<typename T>
+inline bool operator==(const SysAlloc<T>&, const SysAlloc<T>&) {
+  return true;
+}
+
+template<typename T>
+inline bool operator!=(const SysAlloc<T>&, const SysAlloc<T>&) {
+  return false;
+}
+
 class Record {
 public:
     void update_host(void* ptr, size_t size, bool flag);
@@ -98,6 +175,7 @@ public:
         printf("\n+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
         printf("Host peak: %.2f MB, DMA peak: %.2f MB, Total peak: %.2f MB\n", 
             m_host_peak / 1024.0 / 1024.0, m_dma_peak / 1024.0 / 1024.0, m_peak / 1024.0 / 1024.0);
+        get_json();
     }
 
 private:
@@ -105,8 +183,9 @@ private:
     void get_json();
 
 private:
-    std::map<void*, MemBlock> m_host_info;
-    std::map<int, MemBlock> m_dma_info;
+    std::map<void*, MemBlock, std::less<void*>, SysAlloc<std::pair<void* const, MemBlock>>> m_host_info;
+    std::map<int, MemBlock, std::less<int>, SysAlloc<std::pair<const int, MemBlock>>> m_dma_info;
+    std::map<int, MemBlock, std::less<int>, SysAlloc<std::pair<const int, MemBlock>>> m_dma_copy;
     Spinlock m_mutex;
     size_t m_dma_used = 0;
     size_t m_dma_peak = 0;
