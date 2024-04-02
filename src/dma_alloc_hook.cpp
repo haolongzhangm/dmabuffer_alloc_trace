@@ -1,10 +1,7 @@
-#include <dlfcn.h>
 #include <linux/dma-heap.h>
 #include <sys/ioctl.h>
 #include <sys/resource.h>
 #include <utils/CallStack.h>
-#include <cstdio>
-#include <cstdlib>
 
 #include "backtrace_helper/backtrace.h"
 
@@ -44,14 +41,14 @@ public:
         int ret = m_ioctl(__fd, __request, arg);
         if (__request == DMA_HEAP_IOCTL_ALLOC) {
             struct dma_heap_allocation_data* heap_data = (struct dma_heap_allocation_data*)arg;
-            debug::Record::get_instance().update_dma(heap_data->fd, heap_data->len, true);
+            debug::Record::get_instance().dma_alloc(heap_data->fd, heap_data->len);
         }
 
         return ret;
     }
 
     int close(int __fd) {
-        debug::Record::get_instance().update_dma(__fd, 0, false);
+        debug::Record::get_instance().dma_free(__fd);
         return m_close(__fd);
     }
 

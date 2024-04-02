@@ -1,6 +1,5 @@
 #include <dlfcn.h>
 #include <pthread.h>
-#include <cstring>
 
 #include "backtrace_helper/backtrace.h"
 
@@ -105,7 +104,7 @@ void* AllocHook::malloc(size_t size) {
     }
     MarkRecursive mr{tls};
     void* ptr = m_sys_malloc(size);
-    debug::Record::get_instance().update_host(ptr, size, true);
+    debug::Record::get_instance().host_alloc(ptr, size);
     return ptr;
 }
 
@@ -116,7 +115,7 @@ void AllocHook::free(void* ptr) {
         return m_sys_free(ptr);
     }
     MarkRecursive mr{tls};
-    debug::Record::get_instance().update_host(ptr, 0, false);
+    debug::Record::get_instance().host_free(ptr);
     m_sys_free(ptr);
 }
 
@@ -127,7 +126,7 @@ void* AllocHook::calloc(size_t a, size_t b) {
     }
     MarkRecursive mr{tls};
     void* ptr = m_sys_calloc(a, b);
-    debug::Record::get_instance().update_host(ptr, a * b, true);
+    debug::Record::get_instance().host_alloc(ptr, a * b);
     return ptr;
 }
 
@@ -138,7 +137,7 @@ void* AllocHook::realloc(void* ptr, size_t size) {
     }
     MarkRecursive mr{tls};
     void* res = m_sys_realloc(ptr, size);
-    debug::Record::get_instance().update_host(res, size, true);
+    debug::Record::get_instance().host_alloc(res, size);
     return res;
 }
 
@@ -148,7 +147,7 @@ int AllocHook::posix_memalign(void** ptr, size_t alignment, size_t size) {
         return m_sys_posix_memalign(ptr, alignment, size);
     }
     MarkRecursive mr{tls};
-    debug::Record::get_instance().update_host(*ptr, size, true);
+    debug::Record::get_instance().host_alloc(*ptr, size);
     return m_sys_posix_memalign(ptr, alignment, size);
 }
 
