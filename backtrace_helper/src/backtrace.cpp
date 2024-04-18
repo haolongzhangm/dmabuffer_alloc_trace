@@ -41,7 +41,7 @@ size_t Record::backtrace(int32_t skip, size_t size) {
     auto time = std::chrono::duration_cast<std::chrono::microseconds>(current_time.time_since_epoch()).count();
     output_file << "S" << size << "\t";
     output_file << "A" << time << "\t";
-    output_file << "F" << "                       " << std::endl;
+    output_file << "F" << "0                      " << std::endl;
     output_file << str.string() << std::endl;
     output_file.close();
     return len;
@@ -78,20 +78,35 @@ size_t Record::modify(size_t bias) {
     return size;
 }
 
+void Record::print_peak_time() {
+    LOCK_GUARD(m_mutex);
+    m_is_exit = 1;
+    std::ofstream file(m_file, std::ios::app);
+    if (!file.is_open()) {
+        FAIL_EXIT("Failed to open %s\n", m_file);
+    }
+    file << "P" << m_peak_time;
+    file.close();
+}
+
 void Record::host_alloc(void* ptr, size_t size) {
-    if (is_dma_hook) {
+    if (is_dma_hook || m_is_exit) {
         return; // 在 DMA 钩子状态下，直接返回
     }
     LOCK_GUARD(m_mutex);
     m_host_used += size;
     m_host_peak = std::max(m_host_peak, m_host_used);
-    m_peak = std::max(m_peak, (m_host_used + m_dma_used));
+    if (m_peak < (m_host_used + m_dma_used)) {
+        m_peak = m_host_used + m_dma_used;
+        auto current_time = std::chrono::system_clock::now();
+        m_peak_time = std::chrono::duration_cast<std::chrono::microseconds>(current_time.time_since_epoch()).count();
+    }
     size_t bias = backtrace(m_skip, size);
     m_host_bias[ptr] = bias;
 }
 
 void Record::host_free(void* ptr) {
-    if (is_dma_hook) {
+    if (is_dma_hook || m_is_exit) {
         return; // 在 DMA 钩子状态下，直接返回
     }
     LOCK_GUARD(m_mutex);
@@ -108,7 +123,11 @@ void Record::dma_alloc(int fd, size_t len) {
     is_dma_hook = true; // 设置 DMA 钩子状态
     m_dma_used += len;
     m_dma_peak = std::max(m_dma_peak, m_dma_used);
-    m_peak = std::max(m_peak, (m_host_used + m_dma_used));
+    if (m_peak < (m_host_used + m_dma_used)) {
+        m_peak = m_host_used + m_dma_used;
+        auto current_time = std::chrono::system_clock::now();
+        m_peak_time = std::chrono::duration_cast<std::chrono::microseconds>(current_time.time_since_epoch()).count();
+    }
     size_t bias = backtrace(m_skip, len);
     m_dma_bias[fd] = bias;
     is_dma_hook = false; // 恢复 DMA 钩子状态

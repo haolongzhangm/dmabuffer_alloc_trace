@@ -130,15 +130,17 @@ public:
     static Record& get_instance();
     Record() : m_skip(4), m_file("memory_trace.txt") {}
     ~Record() { 
-        printf("\n+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
+        printf("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
         printf("Host peak: %.2f MB, DMA peak: %.2f MB, Total peak: %.2f MB\n", 
             m_host_peak / 1024.0 / 1024.0, m_dma_peak / 1024.0 / 1024.0, m_peak / 1024.0 / 1024.0);
+        print_peak_time();
     }
 
 private:
     bool check_and_create_file();
     size_t backtrace(int32_t skip, size_t size);
     size_t modify(size_t bias);
+    void print_peak_time();
 
 private:
     std::map<void*, size_t, std::less<void*>, SysAlloc<std::pair<void* const, size_t>>> m_host_bias;
@@ -149,6 +151,8 @@ private:
     size_t m_host_used = 0;
     size_t m_host_peak = 0;
     size_t m_peak = 0;
+    int64_t m_peak_time = 0;
+    bool m_is_exit = 0;
     const char* m_file;
     const int32_t m_skip;
 };
