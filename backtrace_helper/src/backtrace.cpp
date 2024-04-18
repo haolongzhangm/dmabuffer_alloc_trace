@@ -1,18 +1,20 @@
 #include <fstream>
 #include <chrono>
-
 #include <utils/CallStack.h>
+#include <thread>
 
-#include "backtrace_helper/backtrace.h"
+#include "backtrace.h"
+#include "memory_hook.h"
 
 namespace debug {
-bool Record::check_and_create_file() {
-    std::ifstream file(m_file);
-    if (file.is_open()) {
-        file.close();
-        return true;
-    }
+static thread_local bool is_dma_hook = false;
 
+int64_t get_current_time() {
+    return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now()
+                .time_since_epoch()).count();
+}
+
+bool Record::check_and_create_file() {
     std::ofstream create_file(m_file);
     if (!create_file.is_open()) {
         return false;
@@ -21,69 +23,54 @@ bool Record::check_and_create_file() {
     return true;
 }
 
-size_t Record::backtrace(int32_t skip, size_t size) {
+void Record::update_free_time(int64_t malloc_time, int64_t free_time) {
+    auto it = m_peak_info.find(malloc_time);
+    if (it != m_peak_info.end()) {
+        if (malloc_time > m_peak_time) {
+            m_peak_info.erase(it);
+        } else {
+            it->second.free_time = free_time;
+        }
+    }
+}
+
+void Record::delete_peak_info() {
+    auto it = m_peak_info.begin();
+    while (it != m_peak_info.end()) {
+        if (it->second.free_time < m_peak_time) {
+            it = m_peak_info.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+char* Record::backtrace(int skip) {
     android::CallStack stack;
     stack.update(skip);
     android::String8 str = stack.toString();
+    if (m_sys_malloc == nullptr) {
+        RESOLVE(malloc);
+    }
+    int length = str.size() + 1; // '\0'
+    char* trace = (char*)m_sys_malloc(length);
+    memcpy(trace, str.c_str(), length);
+    return trace;
+}
 
+void Record::print_peak_memory() {
     if (!check_and_create_file()) {
         FAIL_EXIT("Failed to create %s\n", m_file);
     }
-
-    std::ofstream output_file(m_file, std::ios::app);
-    if (!output_file.is_open()) {
-        FAIL_EXIT("Failed to open %s\n", m_file);
-    }
-    output_file.seekp(0, std::ios::end);
-    size_t len = output_file.tellp();
-    // 获取当前时间
-    auto current_time = std::chrono::system_clock::now();
-    auto time = std::chrono::duration_cast<std::chrono::microseconds>(current_time.time_since_epoch()).count();
-    output_file << "S" << size << "\t";
-    output_file << "A" << time << "\t";
-    output_file << "F" << "0                      " << std::endl;
-    output_file << str.string() << std::endl;
-    output_file.close();
-    return len;
-}
-
-size_t Record::modify(size_t bias) {
-    std::fstream file(m_file, std::ios::in | std::ios::out);
-    if (!file.is_open()) {
-        FAIL_EXIT("Failed to open %s\n", m_file);
-    }
-    file.seekg(bias);
-    char ch;
-    size_t size = 0;
-    while(file.get(ch)) {
-        if (ch == 'S') { 
-            while (file.get(ch)) {
-                if (ch == '\t') {
-                    break;
-                }
-                size = size * 10 + (ch - '0');
-            }
-        }
-
-        if (ch == 'F') {
-            break;
-        }
-    }
-    size_t pos = file.tellg();
-    file.seekp(pos);
-    auto current_time = std::chrono::system_clock::now();
-    auto time = std::chrono::duration_cast<std::chrono::microseconds>(current_time.time_since_epoch()).count();
-    file << time;
-    file.close();
-    return size;
-}
-
-void Record::print_peak_time() {
-    LOCK_GUARD(m_mutex);
-    m_is_exit = 1;
     std::ofstream file(m_file, std::ios::app);
     if (!file.is_open()) {
         FAIL_EXIT("Failed to open %s\n", m_file);
+    }
+    for (auto& it : m_peak_info) {
+        file << "S" << it.second.size << "\t";
+        file << "A" << it.first << "\t";
+        file << "F" << it.second.free_time << "\n";
+        file << it.second.backtrace << "\n";
     }
     file << "P" << m_peak_time;
     file.close();
@@ -91,30 +78,34 @@ void Record::print_peak_time() {
 
 void Record::host_alloc(void* ptr, size_t size) {
     if (is_dma_hook || m_is_exit) {
-        return; // 在 DMA 钩子状态下，直接返回
+        return;
     }
     LOCK_GUARD(m_mutex);
     m_host_used += size;
     m_host_peak = std::max(m_host_peak, m_host_used);
+    auto current_time = get_current_time();
+    m_host_info[ptr] = {size, current_time};
+    m_peak_info[current_time] = {size};
+    m_peak_info[current_time].backtrace = backtrace(4);
     if (m_peak < (m_host_used + m_dma_used)) {
         m_peak = m_host_used + m_dma_used;
-        auto current_time = std::chrono::system_clock::now();
-        m_peak_time = std::chrono::duration_cast<std::chrono::microseconds>(current_time.time_since_epoch()).count();
+        m_peak_time = current_time;
+        delete_peak_info();
     }
-    size_t bias = backtrace(m_skip, size);
-    m_host_bias[ptr] = bias;
 }
 
 void Record::host_free(void* ptr) {
     if (is_dma_hook || m_is_exit) {
-        return; // 在 DMA 钩子状态下，直接返回
+        return;
     }
     LOCK_GUARD(m_mutex);
-    auto it = m_host_bias.find(ptr);
-    if (it != m_host_bias.end()) {
-        size_t size = modify(it->second);
-        m_host_used -= size;
-        m_host_bias.erase(it);
+    auto it = m_host_info.find(ptr);
+    if (it != m_host_info.end()) {
+        auto free_time = get_current_time();
+        m_host_used -= it->second.first;
+        int64_t malloc_time = it->second.second;
+        update_free_time(malloc_time, free_time);
+        m_host_info.erase(it);
     }
 }
 
@@ -123,31 +114,75 @@ void Record::dma_alloc(int fd, size_t len) {
     is_dma_hook = true; // 设置 DMA 钩子状态
     m_dma_used += len;
     m_dma_peak = std::max(m_dma_peak, m_dma_used);
+    auto current_time = get_current_time();
+    m_dma_info[fd] = {len, current_time};
+    m_peak_info[current_time] = {len};
+    m_peak_info[current_time].backtrace = backtrace(5);
     if (m_peak < (m_host_used + m_dma_used)) {
         m_peak = m_host_used + m_dma_used;
-        auto current_time = std::chrono::system_clock::now();
-        m_peak_time = std::chrono::duration_cast<std::chrono::microseconds>(current_time.time_since_epoch()).count();
+        m_peak_time = current_time;
+        delete_peak_info();
     }
-    size_t bias = backtrace(m_skip, len);
-    m_dma_bias[fd] = bias;
     is_dma_hook = false; // 恢复 DMA 钩子状态
 }
 
-void Record::dma_free (int fd) {
+void Record::dma_free(int fd) {
     LOCK_GUARD(m_mutex);
-    auto it = m_dma_bias.find(fd);
-    if (it != m_dma_bias.end()) {
+    auto it = m_dma_info.find(fd);
+    if (it != m_dma_info.end()) {
         is_dma_hook = true; // 设置 DMA 钩子状态
-        size_t size = modify(it->second);
-        m_dma_used -= size;
-        m_dma_bias.erase(it);
+        auto free_time = get_current_time();
+        m_dma_used -= it->second.first;
+        int64_t malloc_time = it->second.second;
+        update_free_time(malloc_time, free_time);
+        m_dma_info.erase(it);
         is_dma_hook = false; // 恢复 DMA 钩子状态
     }
+}
+
+Record::~Record() {
+    m_is_exit = 1;
+    printf("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
+    printf("Host peak: %.2f MB, DMA peak: %.2f MB, Total peak: %.2f MB\n",
+        m_host_peak / 1024.0 / 1024.0, m_dma_peak / 1024.0 / 1024.0, m_peak / 1024.0 / 1024.0);
+    print_peak_memory();
 }
 
 Record& Record::get_instance() {
     static Record instance;
     return instance;
+}
+
+Record::Block::Block(size_t len) : size(len), free_time(__LONG_MAX__), backtrace(nullptr) {}
+
+Record::Block::~Block() {
+    if (m_sys_free == nullptr) {
+        RESOLVE(free);
+    }
+    m_sys_free(backtrace);
+}
+
+template<typename T>
+typename SysAlloc<T>::pointer SysAlloc<T>::allocate(size_type n, const void * hint) {
+    if (n > max_size()) {
+        FAIL_EXIT("Requested memory size exceeds maximum allowed size");
+    }
+    if (m_sys_malloc == nullptr) {
+        RESOLVE(malloc);
+    }
+    void* p = m_sys_malloc(n * sizeof(T));
+    if (!p) {
+        FAIL_EXIT("bad alloc");
+    }
+    return static_cast<pointer>(p);
+}
+
+template<typename T>
+void SysAlloc<T>::deallocate(pointer p, size_type) {
+    if (m_sys_free == nullptr) {
+        RESOLVE(free);
+    }
+    m_sys_free(p);
 }
 
 }  // namespace debug

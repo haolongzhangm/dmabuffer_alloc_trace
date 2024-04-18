@@ -3,7 +3,7 @@
 #include <sys/resource.h>
 #include <utils/CallStack.h>
 
-#include "backtrace_helper/backtrace.h"
+#include "backtrace.h"
 
 class IoctlHook {
     int (*m_ioctl)(int __fd, int __request, ...);

@@ -1,7 +1,8 @@
 #include <dlfcn.h>
 #include <pthread.h>
 
-#include "backtrace_helper/backtrace.h"
+#include "backtrace.h"
+#include "memory_hook.h"
 
 class AllocHook {
     //! thread-local storage, 防止递归调用
@@ -28,12 +29,6 @@ class AllocHook {
     Tls* get_tls_if_enabled();
     static bool is_recursive(const Tls* tls) { return tls->recur_depth; }
 
-    void* (*m_sys_malloc)(size_t);
-    static void (*m_sys_free)(void*);
-    void* (*m_sys_calloc)(size_t, size_t);
-    void* (*m_sys_realloc)(void*, size_t);
-    int (*m_sys_posix_memalign)(void**, size_t, size_t);
-
     pthread_key_t m_tls_key;
     bool m_tls_key_valid = false;
 
@@ -49,24 +44,7 @@ public:
     static AllocHook& inst();
 };
 
-// 定义静态成员变量
-void (*AllocHook::m_sys_free)(void*) = nullptr;
-
 AllocHook::AllocHook() {
-#define RESOLVE(name)                                                  \
-    do {                                                               \
-        auto addr = dlsym(RTLD_NEXT, #name);                           \
-        if (!addr) {                                                   \
-            FAIL_EXIT("can not resolve %s: %s", #name, dlerror());     \
-        }                                                              \
-        m_sys_##name = reinterpret_cast<decltype(m_sys_##name)>(addr); \
-    } while (0)
-    RESOLVE(malloc);
-    RESOLVE(free);
-    RESOLVE(calloc);
-    RESOLVE(realloc);
-    RESOLVE(posix_memalign);
-#undef RESOLVE
     if (auto err = pthread_key_create(&m_tls_key, Tls::dtor)) {
         FAIL_EXIT("failed to create pthread key: %s", strerror(err));
     }
@@ -158,22 +136,37 @@ AllocHook& AllocHook::inst() {
 
 extern "C" {
 void* malloc(size_t size) {
+    if (m_sys_malloc == nullptr) {
+        RESOLVE(malloc);
+    }
     return AllocHook::inst().malloc(size);
 }
 
 void free(void* ptr) {
+    if (m_sys_free == nullptr) {
+        RESOLVE(free);
+    }
     AllocHook::inst().free(ptr);
 }
 
 void* calloc(size_t a, size_t b) {
+    if (m_sys_calloc == nullptr) {
+        RESOLVE(calloc);
+    }
     return AllocHook::inst().calloc(a, b);
 }
 
 void* realloc(void* ptr, size_t size) {
+    if (m_sys_realloc == nullptr) {
+        RESOLVE(realloc);
+    }
     return AllocHook::inst().realloc(ptr, size);
 }
 
 int posix_memalign(void** ptr, size_t alignment, size_t size) {
+    if (m_sys_posix_memalign == nullptr) {
+        RESOLVE(posix_memalign);
+    }
     return AllocHook::inst().posix_memalign(ptr, alignment, size);
 }
 }

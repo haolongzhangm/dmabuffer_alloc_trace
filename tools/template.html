@@ -107,48 +107,6 @@
             white-space: nowrap;
             width: 100%;
         }
-        .mempeak {
-            position: absolute;
-            display: none;
-            background-color: rgba(0, 0, 0, 0.8);
-            color: white;
-            padding: 5px 10px;
-            border-radius: 5px;
-            font-size: 14px;
-            text-align: center;
-            white-space: nowrap;
-            z-index: 999;
-        }
-        /* time select */
-        .time-selector-container {
-            position: absolute;
-            left: 8%;
-            top: 100px;
-            display: inline-block;
-            transform: scaleY(-1);
-            writing-mode: vertical-lr;
-            z-index: 3;
-        }
-        input[type="range"] {
-            height: 600px;
-        }
-        #peak-indicator {
-            position: absolute;
-            left: 19%;
-            width: 8px;
-            height: 8px;
-            background-color: red;
-            border-radius: 50%;
-            z-index: 2;
-        }
-        .time-selector-label {
-            position: absolute;
-            font-size: 15px;
-            font-weight: bold;
-            color: #333;
-            left: 6%;
-            top: 700px;
-        }
     </style>
 </head>
 <body>
@@ -169,8 +127,8 @@
                 <li>当鼠标悬停在内存块上时, 显示内存块信息</li>
                 <li>鼠标左击内存块, 显示堆栈信息</li>
                 <li>鼠标悬停在“内存峰值分布图”上时, 显示内存峰值</li>
-                <li>x 轴表示当前时刻的内存分布及持续时间</li>
-                <li>鼠标左键点击或滑动 time selector, 可以显示不同时刻的内存分布</li>
+                <li>x 轴表示峰值时刻的内存分布及持续时间</li>
+                <li>红色内存块表示未手动释放的内存</li>
             </ul>
             <p>常见问题:</p>
             <ul>
@@ -183,23 +141,13 @@
             <button id="closeBtn">关闭</button>
         </div>
     </div>
-
-    <!-- time select -->
-    <div class="time-selector-container">
-        <div id="peak-indicator"></div>
-        <input type="range" id="time-selector" step="1" value="50" oninput="updateTime()">
-    </div>
-    <label for="time-selector" class="time-selector-label">Time Selector</label>
     
     <!-- tooltip -->
     <div class="bar-tooltip" id="tooltip"></div>
 
     <!-- memory -->
     <div class="center-container">
-        <div class="chart-title">
-            <h4 onmouseover="showMemPeak()" onmouseout="hideMemPeak()">内存分布图</h4>
-            <span id="mempeak" class="mempeak"></span>
-        </div>
+        <div class="chart-title"><h4>内存峰值分布图</h4></div>
         <div class="y-axis-container">
             <svg width="100" height="800"><g class="y-axis"></g></svg>
         </div>
@@ -214,125 +162,94 @@
 
 <!-- JavaScript -->
 <script>
-    var tooltip = d3.select("#tooltip");
-    var lastElement = null;
-	var originColor;
-    var contextWidth = 1300;
-    var contextHeight = 800;
-    var traceData = [];
-    var timeSelector = document.getElementById('time-selector');
+document.addEventListener('DOMContentLoaded', function() {
+    const tooltip = d3.select("#tooltip");
+    let lastElement = null;
+    let originColor;
+    const contextWidth = 1300;
+    const contextHeight = 800;
+
     function updateChart(data, container, yScale, xScale, xStart) {
         const svg = container.append("svg")
-			.attr("width", contextWidth)
-			.attr("height", contextHeight);
-        var currentY = 0;
+            .attr("width", contextWidth)
+            .attr("height", contextHeight);
+        let currentY = 0;
         svg.selectAll("rect")
             .data(data.reverse())
             .enter()
             .append("rect")
             .attr("class", "bar")
-            .attr("x", function(d) { return xScale(d.mallocTime - xStart); })
+            .attr("x", d => xScale(d.mallocTime - xStart))
             .attr("y", d => {
-				const y = currentY;
-				currentY += yScale(d.size);
-				return y;
-			})
-            .attr("width", function(d) { return xScale(d.freeTime - xStart) - xScale(d.mallocTime - xStart); })
+                const y = currentY;
+                currentY += yScale(d.size);
+                return y;
+            })
+            .attr("width", d => xScale(d.freeTime - xStart) - xScale(d.mallocTime - xStart))
             .attr("height", d => yScale(d.size))
-            .attr("fill", (d, i) => i % 2 === 0 ? "#6DC8F1" : "lightgreen")
+            .attr("fill", d => d.fill)
             .on("mouseover", createTooltip)
-            .on("mouseout", function () {
-				tooltip.style("display", "none");
-			})
-            .on("click", function(event){
-                if(lastElement){
-                    alert("请关闭backtrace窗口!!");
-                }
-                else{
-                    // add mouse click to open popup window
-                    event.preventDefault();
-                    if(lastElement){
-                        lastElement.style.fill = originColor;
-                    }
-                    const targetElement = event.target; // get mouse click event
-                    const computedStyle = window.getComputedStyle(targetElement);
-                    originColor = computedStyle.getPropertyValue('fill');
-                    var data = d3.select(targetElement).data()[0];
-                    if (data.stack.length > 0) {
-                        targetElement.style.fill = "orange";
-                        const popup = createPopupWindow(0, 0, data.stack);
-                        lastElement = targetElement;
-                        popup.addEventListener("beforeunload", function () {
-                            targetElement.style.fill = originColor;
-                            lastElement = null;
-                        });
-                    }
-                }
-            });
+            .on("mouseout", hideTooltip)
+            .on("click", handleClick);
     }
-    // function to fiter data
-    function filterdata (peakTime, traceData) {
-        document.getElementById('charts-container').innerHTML = '';
-        var filteredData = traceData.filter(function(item) {
-            return item.mallocTime <= peakTime && item.freeTime >= peakTime;
-        });
-        var xStart = d3.min(filteredData, function(d) { return d.mallocTime; });
-        var xEnd = d3.max(filteredData, function(d) { return d.freeTime; });
-        var memPeak = d3.sum(filteredData, d => d.size);
 
-        var container = d3.select("#charts-container");
+    function filterData(peakTime, traceData, maxFreeTime) {
+        document.getElementById('charts-container').innerHTML = '';
+        traceData.forEach(d => {
+            if (d.freeTime === 9223372036854775807) {
+                d.fill = "red";
+                d.freeTime = maxFreeTime;
+            }
+        });
+        const filteredData = traceData.filter(item => item.mallocTime <= peakTime && item.freeTime >= peakTime);
+        const xStart = d3.min(filteredData, d => d.mallocTime);
+        const xEnd = maxFreeTime;
+        const memPeak = d3.sum(filteredData, d => d.size);
+
+        const container = d3.select("#charts-container");
         const yScale = d3.scaleLinear()
-			.domain([0, memPeak])
-			.range([0, contextHeight]);
-        var xScale = d3.scaleLinear()
+            .domain([0, memPeak])
+            .range([0, contextHeight]);
+        const xScale = d3.scaleLinear()
             .domain([0, xEnd - xStart])
             .range([0, contextWidth]);
-        // add y axis
+
         const yAxis = d3.axisLeft(yScale)
             .ticks(7)
             .tickFormat(d => ((memPeak - d) / 1024).toFixed(1) + "KB");
         const yAxisGroup = d3.select('.y-axis')
             .call(yAxis)
             .attr('transform', `translate(90, 4)`);
-        // add x axis
+
         const xAxis = d3.axisBottom(xScale)
             .ticks(15)
             .tickFormat(d => (d / 1000).toFixed(0) + "ms");
         const xAxisGroup = d3.select('.x-axis')
             .call(xAxis)
             .attr('transform', `translate(9, 0)`);
-        updateChart(filteredData, container, yScale, xScale, xStart);
 
-        const memoryPeak = document.getElementById("mempeak");
-        memoryPeak.textContent = "内存峰值为: " + (memPeak / 1024).toFixed(2) + "KB";
+        updateChart(filteredData, container, yScale, xScale, xStart);
         document.getElementById('content').style.display = 'block';
     }
-	// Function to show mempeak content
-	function showMemPeak() {
-		const memoryPeak = document.getElementById("mempeak");
-		memoryPeak.style.display = "block";
-	}
-	// Function to hide mempeak content
-	function hideMemPeak() {
-		const memoryPeak = document.getElementById("mempeak");
-		memoryPeak.style.display = "none";
-	}
-    // show tooltip
-    function createTooltip () {
-		const d = d3.select(this).data()[0];
-		const mouseX = event.clientX;
-		const mouseY = event.clientY + window.scrollY;
-		let tooltipX = mouseX;
-		let tooltipY = mouseY;
 
-		var tooltipContent = "<strong>Size:</strong> " + 
+    function createTooltip() {
+        const d = d3.select(this).data()[0];
+        const mouseX = event.clientX;
+        const mouseY = event.clientY + window.scrollY;
+        const tooltipX = mouseX;
+        const tooltipY = mouseY;
+        const tooltipContent = "<strong>Size:</strong> " + 
                 (d.size / 1024).toFixed(1) + "KB" + "<br><strong>Duration:</strong> " + (d.freeTime - d.mallocTime) / 1000 + "ms";
-		tooltip.style("left", tooltipX + "px");
-		tooltip.style("top", tooltipY + "px");
-		tooltip.style("display", "block");
-		tooltip.html(tooltipContent);
-	}
-    // create popup window
+        tooltip.style("left", tooltipX + "px")
+               .style("top", tooltipY + "px")
+               .style("display", "block")
+               .html(tooltipContent);
+    }
+
+    function hideTooltip() {
+        tooltip.style("display", "none");
+    }
+
     function createPopupWindow(x, y, d) {
 		const width = 800;
 		const height = 700;
@@ -341,7 +258,7 @@
 		const popup = window.open("", "PopupWindow", `width=${width}, height=${height}, left=${left}, top=${top}`);
 		popup.document.body.innerHTML = "";
         var extractedData = d.map(function(line) {
-            var match = line.match(/#(\d+)\s+pc\s+([0-9a-fA-F]+)\s+(.*?) \((.*?)\+(\d+)\)/);
+            var match = line.match(/#(\d+)\s+pc\s+([0-9a-fA-F]+)\s+(.*)/);
             if (match) {
                 return {
                     id: match[1],
@@ -355,96 +272,103 @@
         });
 		popup.document.write("<strong>Backtrace:</strong><ul>");
 		extractedData.forEach(function (trace) {
-			popup.document.write("<li><strong>ID:</strong> " + trace.id + "<br><strong>Address:</strong> 0x" +trace.address + "<br><strong>Library:</strong> " + trace.library + "<br><strong>Function:</strong> " + trace.function + "</li><br>");
+			popup.document.write("<li><strong>ID:</strong> " + trace.id + "<br><strong>Address:</strong> 0x" +trace.address + "<br><strong>Library:</strong> " + trace.library + "</li><br>");
 		});
 		popup.document.write("</ul>");
 		return popup;
 	}
-    // control tips
+
+    function handleClick(event) {
+        if (lastElement) {
+            alert("请关闭backtrace窗口!!");
+            return;
+        }
+        event.preventDefault();
+        if (lastElement) {
+            lastElement.style.fill = originColor;
+        }
+        const targetElement = event.target;
+        const computedStyle = window.getComputedStyle(targetElement);
+        originColor = computedStyle.getPropertyValue('fill');
+        const data = d3.select(targetElement).data()[0];
+        if (data.stack.length > 0) {
+            targetElement.style.fill = "orange";
+            const popup = createPopupWindow(0, 0, data.stack);
+            lastElement = targetElement;
+            popup.addEventListener("beforeunload", function () {
+                targetElement.style.fill = originColor;
+                lastElement = null;
+            });
+        }
+    }
+
     const dropdownBtn = document.getElementById("dropdownBtn");
     const myPopup = document.getElementById("myPopup");
     const closeBtn = document.getElementById("closeBtn");
 
-    dropdownBtn.addEventListener("click", function () {
+    dropdownBtn.addEventListener("click", () => {
         myPopup.style.display = "block";
     });
 
-    closeBtn.addEventListener("click", function () {
+    closeBtn.addEventListener("click", () => {
         myPopup.style.display = "none";
     });
-    // time selector
-    function updateTime() {
-        timeSelector.addEventListener("mouseup", function(event) {
-        if (event.button === 0) {
-            const selectTime = timeSelector.value;
-            filterdata(selectTime, traceData);
-        }
-    });
+
+    document.getElementById('loading-container').style.display = 'block';
+    const traceScript = document.querySelector('script.trace');
+    if (!traceScript) {
+        console.error('找不到匹配的 <script> 标签。');
+        return;
     }
-    // load code
-    document.addEventListener('DOMContentLoaded', function() {
-        document.getElementById('loading-container').style.display = 'block';
-        var traceScript = document.querySelector('script.trace');
-        if (!traceScript) {
-            console.error('找不到匹配的 <script> 标签。');
-            return;
-        }
         
-        var traceText = traceScript.textContent;
-        var lines = traceText.trim().split('\n');
-        var entry = null;
-        var flag = false;
-        var peakTime = 0;
-        var minMallocTime = Infinity;
-        var maxFreeTime = -Infinity;
-        lines.forEach(function(line) {
-            var trimmedLine = line.trim();
-            if (trimmedLine.startsWith("S")) {
-                var matches = trimmedLine.match(/^S(\d+)\s+A(\d+)\s+F(\d+)\s*$/);
-                if (matches) {
-                    var size = parseInt(matches[1]);
-                    flag = matches[3] !== '0' && size > 1023; // update flag
-                    if (flag) {
-                        entry = {
-                            size: size,
-                            mallocTime: parseInt(matches[2]),
-                            freeTime: parseInt(matches[3]),
-                            stack: [] // init stack
-                        };
-                        minMallocTime = Math.min(minMallocTime, entry.mallocTime);
-                        maxFreeTime = Math.max(maxFreeTime, entry.freeTime);
+    const traceText = traceScript.textContent;
+    const lines = traceText.trim().split('\n');
+    const traceData = [];
+    let flag = false;
+    let peakTime = 0;
+    let maxFreeTime = Number.MIN_SAFE_INTEGER;
+    let i = 0;
+    lines.forEach(line => {
+        const trimmedLine = line.trim();
+        if (trimmedLine.startsWith("S")) {
+            const matches = trimmedLine.match(/^S(\d+)\s+A(\d+)\s+F(\d+)\s*$/);
+            if (matches) {
+                const size = parseInt(matches[1]);
+                flag = size > 1023;
+                if (flag) {
+                    i++;
+                    const fill = "lightgreen";
+                    const mallocTime = parseInt(matches[2]);
+                    const freeTime = parseInt(matches[3]);
+                    const entry = {
+                        size: size,
+                        mallocTime: mallocTime,
+                        freeTime: freeTime,
+                        fill: i % 2 === 0 ? "#6DC8F1" : "lightgreen",
+                        stack: []
+                    };
+                    if (freeTime !== 9223372036854775807 && freeTime > maxFreeTime) {
+                        maxFreeTime = freeTime;
                     }
-                } else {
-                    console.error("Failed to match line:", line);
+                    traceData.push(entry);
                 }
-            } else if (trimmedLine.startsWith("#") && flag) {
-                entry.stack.push(trimmedLine);
-            } else if (trimmedLine === "" && flag) {
-                traceData.push(entry);
+            } else {
+                console.error("Failed to match line:", line);
             }
-            else if (trimmedLine.startsWith("P")) {
-                var matches = trimmedLine.match(/^p(\d+)/i);
-                if (matches) {
-                    peakTime = parseInt(matches[1]);
-                } else {
-                    console.error("Failed to match number after 'p'");
-                }
-                
+        } else if (trimmedLine.startsWith("#") && flag) {
+            traceData[traceData.length - 1].stack.push(trimmedLine);
+        } else if (trimmedLine.startsWith("P")) {
+            const matches = trimmedLine.match(/^p(\d+)/i);
+            if (matches) {
+                peakTime = parseInt(matches[1]);
+            } else {
+                console.error("Failed to match peakTime");
             }
-        });
-        // update time select
-        const peakIndicator = document.getElementById('peak-indicator');
-        timeSelector.min = minMallocTime;
-        timeSelector.max = maxFreeTime;
-        timeSelector.value = peakTime;
-        const range = maxFreeTime - minMallocTime;
-        const percent = (peakTime - minMallocTime) / range;
-        const indicatorPosition =  600*percent;
-        peakIndicator.style.top = `${indicatorPosition}px`;
-        // update chart
-        filterdata(peakTime, traceData);
-        document.getElementById('loading-container').style.display = 'none';
+        }
     });
+    filterData(peakTime, traceData, maxFreeTime);
+    document.getElementById('loading-container').style.display = 'none';
+});
 </script>
 
 <!-- backtrace info -->
