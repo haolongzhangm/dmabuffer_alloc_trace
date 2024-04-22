@@ -21,6 +21,7 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 endif()
 
 add_subdirectory(aosp_file)
+add_subdirectory(backtrace_helper)
 
 if (ANDROID_ABI MATCHES "arm64-v8a")
     set(VNDK_LIB_PATH "${CMAKE_CURRENT_SOURCE_DIR}/aosp_file/com.android.vndk.v30/lib64")
@@ -30,9 +31,12 @@ else ()
     set(APEX_LIB_PATH "${CMAKE_CURRENT_SOURCE_DIR}/aosp_file/com.android.runtime/lib")
 endif ()
 
-add_library(dma_alloc_hook SHARED ${CMAKE_SOURCE_DIR}/src/dma_alloc_hook.cpp)
-target_link_libraries(dma_alloc_hook PRIVATE backtrace_header)
-install(TARGETS dma_alloc_hook DESTINATION ${CMAKE_INSTALL_PREFIX}/out/lib)
+# 添加 .so
+add_library(alloc_hook SHARED ${CMAKE_SOURCE_DIR}/src/host_alloc_hook.cpp ${CMAKE_SOURCE_DIR}/src/dma_alloc_hook.cpp)
+# 链接需要的库和头文件
+target_link_libraries(alloc_hook PRIVATE backtrace_helper)
+# 安装到 out/lib 目录
+install(TARGETS alloc_hook DESTINATION ${CMAKE_INSTALL_PREFIX}/out/lib)
 
 add_library(checkleak SHARED ${CMAKE_SOURCE_DIR}/src/checkleak.cpp)
 target_link_directories(checkleak PRIVATE ${VNDK_LIB_PATH} ${APEX_LIB_PATH})

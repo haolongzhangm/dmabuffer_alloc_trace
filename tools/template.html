@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Memory Visulization</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        /* loading style. */
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .loading-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background-color: #f0f0f0;
+        }
+        .loading {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 2s linear infinite;
+        }
+        /* tips style*/
+        .dropdown {
+            position: relative;
+            display: inline-block;
+        }
+        #dropdownBtn {
+            background-color: #3498db;
+            color: #fff;
+            border: none;
+            padding: 10px 20px;
+            cursor: pointer;
+            border-radius: 5px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: background-color 0.3s ease;
+        }
+        #dropdownBtn:hover {
+            background-color: #2c85c7;
+        }
+        .myPopup {
+            display: none;
+            position: absolute;
+            top: 50px;
+            left: 50%;
+            background-color: #fff;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            width: 500px;
+            z-index: 999;
+        }
+        .myPopup p {
+            margin: 0 0 15px 0;
+        }
+        .myPopup ul {
+            list-style-type: disc;
+            padding-left: 20px;
+        }
+        #closeBtn {
+            background-color: #e74c3c;
+            color: #fff;
+            border: none;
+            padding: 10px 20px;
+            cursor: pointer;
+            margin-top: 10px;
+            border-radius: 5px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: background-color 0.3s ease;
+        }
+        #closeBtn:hover {
+            background-color: #c9302c;
+        }
+        /* tooltip style */
+        .bar-tooltip {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            display: none;
+            z-index: 999;
+        }
+        /* memory style */
+        .center-container {
+            margin-top: 1%;
+            display: flex;
+            justify-content: center;
+            align-items: start;
+        }
+        .chart-title {
+            position: absolute;
+            top: 0;
+            left: 50%; /* Horizontally center the title */
+        }
+        .charts-container {
+            display: flex;
+            overflow-x: auto;
+            white-space: nowrap;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+
+<!-- loading... -->
+<div class="loading-container" id="loading-container">
+    <div class="loading"></div>
+    <p>Loading...</p>
+</div>
+
+<div class="content" id="content" style="display: none;">
+    <!-- tips -->
+    <div class="dropdown">
+        <button id="dropdownBtn"> Tips </button>
+        <div id="myPopup" class="myPopup">
+            <p>使用技巧:</p>
+            <ul>
+                <li>当鼠标悬停在内存块上时, 显示内存块信息</li>
+                <li>鼠标左击内存块, 显示堆栈信息</li>
+                <li>鼠标悬停在“内存峰值分布图”上时, 显示内存峰值</li>
+                <li>x 轴表示峰值时刻的内存分布及持续时间</li>
+                <li>红色内存块表示未手动释放的内存</li>
+            </ul>
+            <p>常见问题:</p>
+            <ul>
+                <li>堆栈展开时没有符号, 只有地址</li>
+                    <ol>                    
+                        <li> 用带符号表的文件进行抓 trace</li>
+                        <li> 如果用 strip 后的库的话， 编译时请去掉 --version-script </li>
+                    </ol>
+            </ul>
+            <button id="closeBtn">关闭</button>
+        </div>
+    </div>
+    
+    <!-- tooltip -->
+    <div class="bar-tooltip" id="tooltip"></div>
+
+    <!-- memory -->
+    <div class="center-container">
+        <div class="chart-title"><h4>内存峰值分布图</h4></div>
+        <div class="y-axis-container">
+            <svg width="100" height="800"><g class="y-axis"></g></svg>
+        </div>
+        <div class="chart-x-axis-container">
+            <div class="chart-container" id="charts-container"></div>
+            <div class="x-axis-container">
+                <svg width="1300" height="30"><g class="x-axis"></g></svg>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- JavaScript -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const tooltip = d3.select("#tooltip");
+    let lastElement = null;
+    let originColor;
+    const contextWidth = 1300;
+    const contextHeight = 800;
+
+    function updateChart(data, container, yScale, xScale, xStart) {
+        const svg = container.append("svg")
+            .attr("width", contextWidth)
+            .attr("height", contextHeight);
+        let currentY = 0;
+        svg.selectAll("rect")
+            .data(data.reverse())
+            .enter()
+            .append("rect")
+            .attr("class", "bar")
+            .attr("x", d => xScale(d.mallocTime - xStart))
+            .attr("y", d => {
+                const y = currentY;
+                currentY += yScale(d.size);
+                return y;
+            })
+            .attr("width", d => xScale(d.freeTime - xStart) - xScale(d.mallocTime - xStart))
+            .attr("height", d => yScale(d.size))
+            .attr("fill", d => d.fill)
+            .on("mouseover", createTooltip)
+            .on("mouseout", hideTooltip)
+            .on("click", handleClick);
+    }
+
+    function filterData(peakTime, traceData, maxFreeTime) {
+        document.getElementById('charts-container').innerHTML = '';
+        traceData.forEach(d => {
+            if (d.freeTime === 9223372036854775807) {
+                d.fill = "red";
+                d.freeTime = maxFreeTime;
+            }
+        });
+        const filteredData = traceData.filter(item => item.mallocTime <= peakTime && item.freeTime >= peakTime);
+        const xStart = d3.min(filteredData, d => d.mallocTime);
+        const xEnd = maxFreeTime;
+        const memPeak = d3.sum(filteredData, d => d.size);
+
+        const container = d3.select("#charts-container");
+        const yScale = d3.scaleLinear()
+            .domain([0, memPeak])
+            .range([0, contextHeight]);
+        const xScale = d3.scaleLinear()
+            .domain([0, xEnd - xStart])
+            .range([0, contextWidth]);
+
+        const yAxis = d3.axisLeft(yScale)
+            .ticks(7)
+            .tickFormat(d => ((memPeak - d) / 1024).toFixed(1) + "KB");
+        const yAxisGroup = d3.select('.y-axis')
+            .call(yAxis)
+            .attr('transform', `translate(90, 4)`);
+
+        const xAxis = d3.axisBottom(xScale)
+            .ticks(15)
+            .tickFormat(d => (d / 1000).toFixed(0) + "ms");
+        const xAxisGroup = d3.select('.x-axis')
+            .call(xAxis)
+            .attr('transform', `translate(9, 0)`);
+
+        updateChart(filteredData, container, yScale, xScale, xStart);
+        document.getElementById('content').style.display = 'block';
+    }
+
+    function createTooltip() {
+        const d = d3.select(this).data()[0];
+        const mouseX = event.clientX;
+        const mouseY = event.clientY + window.scrollY;
+        const tooltipX = mouseX;
+        const tooltipY = mouseY;
+        const tooltipContent = "<strong>Size:</strong> " + 
+                (d.size / 1024).toFixed(1) + "KB" + "<br><strong>Duration:</strong> " + (d.freeTime - d.mallocTime) / 1000 + "ms";
+        tooltip.style("left", tooltipX + "px")
+               .style("top", tooltipY + "px")
+               .style("display", "block")
+               .html(tooltipContent);
+    }
+
+    function hideTooltip() {
+        tooltip.style("display", "none");
+    }
+
+    function createPopupWindow(x, y, d) {
+		const width = 800;
+		const height = 700;
+		const left = x;
+		const top = y;
+		const popup = window.open("", "PopupWindow", `width=${width}, height=${height}, left=${left}, top=${top}`);
+		popup.document.body.innerHTML = "";
+        var extractedData = d.map(function(line) {
+            var match = line.match(/#(\d+)\s+pc\s+([0-9a-fA-F]+)\s+(.*)/);
+            if (match) {
+                return {
+                    id: match[1],
+                    address: match[2],
+                    library: match[3],
+                    function: match[4]
+                };
+            } else {
+                return null;
+            }
+        });
+		popup.document.write("<strong>Backtrace:</strong><ul>");
+		extractedData.forEach(function (trace) {
+			popup.document.write("<li><strong>ID:</strong> " + trace.id + "<br><strong>Address:</strong> 0x" +trace.address + "<br><strong>Library:</strong> " + trace.library + "</li><br>");
+		});
+		popup.document.write("</ul>");
+		return popup;
+	}
+
+    function handleClick(event) {
+        if (lastElement) {
+            alert("请关闭backtrace窗口!!");
+            return;
+        }
+        event.preventDefault();
+        if (lastElement) {
+            lastElement.style.fill = originColor;
+        }
+        const targetElement = event.target;
+        const computedStyle = window.getComputedStyle(targetElement);
+        originColor = computedStyle.getPropertyValue('fill');
+        const data = d3.select(targetElement).data()[0];
+        if (data.stack.length > 0) {
+            targetElement.style.fill = "orange";
+            const popup = createPopupWindow(0, 0, data.stack);
+            lastElement = targetElement;
+            popup.addEventListener("beforeunload", function () {
+                targetElement.style.fill = originColor;
+                lastElement = null;
+            });
+        }
+    }
+
+    const dropdownBtn = document.getElementById("dropdownBtn");
+    const myPopup = document.getElementById("myPopup");
+    const closeBtn = document.getElementById("closeBtn");
+
+    dropdownBtn.addEventListener("click", () => {
+        myPopup.style.display = "block";
+    });
+
+    closeBtn.addEventListener("click", () => {
+        myPopup.style.display = "none";
+    });
+
+    document.getElementById('loading-container').style.display = 'block';
+    const traceScript = document.querySelector('script.trace');
+    if (!traceScript) {
+        console.error('找不到匹配的 <script> 标签。');
+        return;
+    }
+        
+    const traceText = traceScript.textContent;
+    const lines = traceText.trim().split('\n');
+    const traceData = [];
+    let flag = false;
+    let peakTime = 0;
+    let maxFreeTime = Number.MIN_SAFE_INTEGER;
+    let i = 0;
+    lines.forEach(line => {
+        const trimmedLine = line.trim();
+        if (trimmedLine.startsWith("S")) {
+            const matches = trimmedLine.match(/^S(\d+)\s+A(\d+)\s+F(\d+)\s*$/);
+            if (matches) {
+                const size = parseInt(matches[1]);
+                flag = size > 1023;
+                if (flag) {
+                    i++;
+                    const fill = "lightgreen";
+                    const mallocTime = parseInt(matches[2]);
+                    const freeTime = parseInt(matches[3]);
+                    const entry = {
+                        size: size,
+                        mallocTime: mallocTime,
+                        freeTime: freeTime,
+                        fill: i % 2 === 0 ? "#6DC8F1" : "lightgreen",
+                        stack: []
+                    };
+                    if (freeTime !== 9223372036854775807 && freeTime > maxFreeTime) {
+                        maxFreeTime = freeTime;
+                    }
+                    traceData.push(entry);
+                }
+            } else {
+                console.error("Failed to match line:", line);
+            }
+        } else if (trimmedLine.startsWith("#") && flag) {
+            traceData[traceData.length - 1].stack.push(trimmedLine);
+        } else if (trimmedLine.startsWith("P")) {
+            const matches = trimmedLine.match(/^p(\d+)/i);
+            if (matches) {
+                peakTime = parseInt(matches[1]);
+            } else {
+                console.error("Failed to match peakTime");
+            }
+        }
+    });
+    filterData(peakTime, traceData, maxFreeTime);
+    document.getElementById('loading-container').style.display = 'none';
+});
+</script>
+
+<!-- backtrace info -->
+<script class="trace" type="application/text">
