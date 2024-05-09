@@ -1,13 +1,13 @@
 #include <fstream>
 #include <chrono>
 #include <utils/CallStack.h>
-#include <thread>
 
 #include "backtrace.h"
 #include "memory_hook.h"
 
 namespace debug {
-static thread_local bool is_dma_hook = false;
+
+std::atomic_bool is_dma_hook(false);
 
 int64_t get_current_time() {
     return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now()
@@ -77,7 +77,7 @@ void Record::print_peak_memory() {
 }
 
 void Record::host_alloc(void* ptr, size_t size) {
-    if (is_dma_hook || m_is_exit) {
+    if (is_dma_hook.load(std::memory_order_acquire) || m_is_exit) {
         return;
     }
     LOCK_GUARD(m_mutex);
@@ -95,7 +95,7 @@ void Record::host_alloc(void* ptr, size_t size) {
 }
 
 void Record::host_free(void* ptr) {
-    if (is_dma_hook || m_is_exit) {
+    if (is_dma_hook.load(std::memory_order_acquire) || m_is_exit) {
         return;
     }
     LOCK_GUARD(m_mutex);
@@ -111,6 +111,7 @@ void Record::host_free(void* ptr) {
 
 void Record::dma_alloc(int fd, size_t len) {
     LOCK_GUARD(m_mutex);
+    is_dma_hook.store(true, std::memory_order_release);
     is_dma_hook = true; // 设置 DMA 钩子状态
     m_dma_used += len;
     m_dma_peak = std::max(m_dma_peak, m_dma_used);
@@ -123,20 +124,20 @@ void Record::dma_alloc(int fd, size_t len) {
         m_peak_time = current_time;
         delete_peak_info();
     }
-    is_dma_hook = false; // 恢复 DMA 钩子状态
+    is_dma_hook.store(false, std::memory_order_release); // 恢复 DMA 钩子状态
 }
 
 void Record::dma_free(int fd) {
     LOCK_GUARD(m_mutex);
     auto it = m_dma_info.find(fd);
     if (it != m_dma_info.end()) {
-        is_dma_hook = true; // 设置 DMA 钩子状态
+        is_dma_hook.store(true, std::memory_order_release); // 设置 DMA 钩子状态
         auto free_time = get_current_time();
         m_dma_used -= it->second.first;
         int64_t malloc_time = it->second.second;
         update_free_time(malloc_time, free_time);
         m_dma_info.erase(it);
-        is_dma_hook = false; // 恢复 DMA 钩子状态
+        is_dma_hook.store(false, std::memory_order_release); // 恢复 DMA 钩子状态
     }
 }
 
