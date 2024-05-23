@@ -98,6 +98,12 @@ class IoctlHook {
     }
 
     void show_peak_size() { printf("DMA: peak size: %f KB\n", m_dma_peak / 1024.0); }
+    void show_used_size() { printf("DMA: used size: %f KB\n", m_used_size / 1024.0); }
+    void show_unreleased_fds() {
+        for (auto& it : m_alloc_info) {
+            printf("unreleased fd: %d, size: %f KB\n", it.first, it.second.first / 1024.0);
+        }
+    }
 
 public:
     IoctlHook() {
@@ -124,6 +130,8 @@ public:
         std::atexit([] {
             IoctlHook::GetInstance().show_non_dma_info();
             IoctlHook::GetInstance().show_peak_size();
+            IoctlHook::GetInstance().show_used_size();
+            IoctlHook::GetInstance().show_unreleased_fds();
             printf("may NON-DMA+DMA peak size(only for reference, not accuracy, "
                    "depends on DMA alloc frequency): %f KB\n",
                    IoctlHook::GetInstance().m_may_peak_with_dma_and_no_dma / 1024.0);
@@ -159,6 +167,8 @@ public:
                    m_used_size / 1024.0, m_dma_peak / 1024.0, m_alloc_count);
 
             bt();
+            show_peak_size();
+            show_used_size();
             printf("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
                    "++++\n");
 
@@ -187,9 +197,12 @@ public:
             printf("dma free happened: fd: %d, size: %f KB, duration: %f ms\n", __fd,
                    size / 1024.0, diff);
             bt();
+            m_alloc_info.erase(__fd);
+            show_peak_size();
+            show_used_size();
+            show_unreleased_fds();
             printf("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
                    "++++\n");
-            m_alloc_info.erase(__fd);
         }
         return m_close(__fd);
     }
