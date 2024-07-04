@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013 The Android Open Source Project
+ * Copyright (C) 2009 The Android Open Source Project
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -28,10 +28,15 @@
 
 #pragma once
 
-#include <stdint.h>
-#include <sys/cdefs.h>
+#include <async_safe/log.h>
 
-#include <string>
-
-size_t backtrace_get(uintptr_t* frames, size_t frame_count);
-std::string backtrace_string(const uintptr_t* frames, size_t frame_count);
+// =============================================================================
+// log functions
+// =============================================================================
+#define debug_log(format, ...) \
+  async_safe_format_log(ANDROID_LOG_DEBUG, "malloc_debug", (format), ##__VA_ARGS__)
+#define error_log(format, ...) \
+  async_safe_format_log(ANDROID_LOG_ERROR, "malloc_debug", (format), ##__VA_ARGS__)
+#define error_log_string(str) async_safe_write_log(ANDROID_LOG_ERROR, "malloc_debug", (str))
+#define info_log(format, ...) \
+  async_safe_format_log(ANDROID_LOG_INFO, "malloc_debug", (format), ##__VA_ARGS__)

@@ -1,9 +1,8 @@
 #include <linux/dma-heap.h>
 #include <sys/ioctl.h>
 #include <sys/resource.h>
-#include <utils/CallStack.h>
 
-#include "backtrace.h"
+#include "helper.h"
 
 class IoctlHook {
     int (*m_ioctl)(int __fd, int __request, ...);

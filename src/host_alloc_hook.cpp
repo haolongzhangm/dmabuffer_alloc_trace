@@ -1,7 +1,7 @@
 #include <dlfcn.h>
 #include <pthread.h>
 
-#include "backtrace.h"
+#include "helper.h"
 #include "memory_hook.h"
 
 class AllocHook {
