@@ -1,5 +1,6 @@
 #include <dlfcn.h>
 #include <pthread.h>
+#include <new>
 
 #include "helper.h"
 #include "memory_hook.h"
@@ -169,4 +170,52 @@ int posix_memalign(void** ptr, size_t alignment, size_t size) {
     }
     return AllocHook::inst().posix_memalign(ptr, alignment, size);
 }
+}
+
+// 重载全局的 operator new
+void* operator new(size_t size) {
+    if (m_sys_malloc == nullptr) {
+        RESOLVE(malloc);
+    }
+    return AllocHook::inst().malloc(size);
+}
+
+// 重载全局的 operator new[]
+void* operator new[](size_t size) {
+    if (m_sys_malloc == nullptr) {
+        RESOLVE(malloc);
+    }
+    return AllocHook::inst().malloc(size);
+}
+
+// 重载全局的 operator delete
+void operator delete(void* ptr) noexcept {
+    if (m_sys_free == nullptr) {
+        RESOLVE(free);
+    }
+    AllocHook::inst().free(ptr);
+}
+
+// 重载全局的 operator delete[]
+void operator delete[](void* ptr) noexcept {
+    if (m_sys_free == nullptr) {
+        RESOLVE(free);
+    }
+    AllocHook::inst().free(ptr);
+}
+
+// 重载带有 size 参数的 operator delete
+void operator delete(void* ptr, size_t size) noexcept {
+    if (m_sys_free == nullptr) {
+        RESOLVE(free);
+    }
+    AllocHook::inst().free(ptr);
+}
+
+// 重载带有 size 参数的 operator delete[]
+void operator delete[](void* ptr, size_t size) noexcept {
+    if (m_sys_free == nullptr) {
+        RESOLVE(free);
+    }
+    AllocHook::inst().free(ptr);
 }
