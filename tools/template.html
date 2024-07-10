@@ -195,12 +195,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function filterData(peakTime, traceData, maxFreeTime) {
         document.getElementById('charts-container').innerHTML = '';
-        traceData.forEach(d => {
-            if (d.freeTime === 9223372036854775807) {
-                d.fill = "red";
-                d.freeTime = maxFreeTime;
-            }
-        });
         const filteredData = traceData.filter(item => item.mallocTime <= peakTime && item.freeTime >= peakTime);
         const xStart = d3.min(filteredData, d => d.mallocTime);
         const xEnd = maxFreeTime;
@@ -258,7 +252,7 @@ document.addEventListener('DOMContentLoaded', function() {
 		const popup = window.open("", "PopupWindow", `width=${width}, height=${height}, left=${left}, top=${top}`);
 		popup.document.body.innerHTML = "";
         var extractedData = d.map(function(line) {
-            var match = line.match(/#(\d+)\s+pc\s+([0-9a-fA-F]+)\s+(.*)/);
+            var match = line.match(/#(\d+)\s+([0-9a-fA-F]+)\s+(.*)/);
             if (match) {
                 return {
                     id: match[1],
@@ -347,7 +341,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         fill: i % 2 === 0 ? "#6DC8F1" : "lightgreen",
                         stack: []
                     };
-                    if (freeTime !== 9223372036854775807 && freeTime > maxFreeTime) {
+                    if (freeTime > maxFreeTime) {
                         maxFreeTime = freeTime;
                     }
                     traceData.push(entry);

@@ -22,11 +22,11 @@ public:
     void dma_alloc(int fd, size_t len);
     void dma_free(int fd);
     static Record& get_instance();
-    Record() : m_file("memory_trace.txt") {}
+    Record() : m_trace_file("memory_trace.txt"), m_leak_file("leak_trace.txt") {}
     ~Record();
 
 private:
-    bool check_and_create_file();
+    bool check_and_create_file(const char* file);
     char* backtrace(int skip);
     void print_peak_memory();
     void update_free_time(int64_t malloc_time, int64_t free_time);
@@ -44,7 +44,8 @@ private:
     size_t m_peak = 0;
     int64_t m_peak_time = 0;
     std::atomic_bool is_host_hook{false};
-    const char* m_file;
+    const char* m_trace_file;
+    const char* m_leak_file;
 };
 
 }

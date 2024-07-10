@@ -16,8 +16,8 @@ int64_t get_current_time() {
                 .time_since_epoch()).count();
 }
 
-bool Record::check_and_create_file() {
-    std::ofstream create_file(m_file);
+bool Record::check_and_create_file(const char* file) {
+    std::ofstream create_file(file);
     if (!create_file.is_open()) {
         return false;
     }
@@ -63,21 +63,30 @@ char* Record::backtrace(int skip) {
 }
 
 void Record::print_peak_memory() {
-    if (!check_and_create_file()) {
-        FAIL_EXIT("Failed to create %s\n", m_file);
+    if (!check_and_create_file(m_trace_file) 
+            || !check_and_create_file(m_leak_file)) {
+        FAIL_EXIT("Failed to create trace files\n");
     }
-    std::ofstream file(m_file, std::ios::app);
-    if (!file.is_open()) {
-        FAIL_EXIT("Failed to open %s\n", m_file);
+    std::ofstream trace_file(m_trace_file, std::ios::app);
+    std::ofstream leak_file(m_leak_file, std::ios::app);
+    if (!trace_file.is_open() || !leak_file.is_open()) {
+        FAIL_EXIT("Failed to open trace files\n");
     }
     for (auto& it : m_peak_info) {
-        file << "S" << it.second.size << "\t";
-        file << "A" << it.first << "\t";
-        file << "F" << it.second.free_time << "\n";
-        file << it.second.backtrace << "\n";
+        if (it.second.free_time == __LONG_MAX__) {
+            leak_file << "Size:" << it.second.size << "\t";
+            leak_file << "Alloc time:" << it.first << "\n";
+            leak_file << it.second.backtrace << "\n";
+            continue;
+        }
+        trace_file << "S" << it.second.size << "\t";
+        trace_file << "A" << it.first << "\t";
+        trace_file << "F" << it.second.free_time << "\n";
+        trace_file << it.second.backtrace << "\n";
     }
-    file << "P" << m_peak_time;
-    file.close();
+    trace_file << "P" << m_peak_time;
+    trace_file.close();
+    leak_file.close();
 }
 
 void Record::host_alloc(void* ptr, size_t size) {
