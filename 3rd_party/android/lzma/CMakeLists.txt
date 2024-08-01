@@ -1,0 +1,45 @@
+add_library(lzma STATIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/C/7zAlloc.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/C/7zArcIn.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/C/7zBuf2.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/C/7zBuf.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/C/7zCrc.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/C/7zCrcOpt.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/C/7zDec.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/C/7zFile.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/C/7zStream.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/C/Aes.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/C/AesOpt.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/C/Alloc.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/C/Bcj2.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/C/Bra86.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/C/Bra.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/C/BraIA64.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/C/CpuArch.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/C/Delta.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/C/LzFind.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/C/Lzma2Dec.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/C/Lzma2Enc.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/C/Lzma86Dec.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/C/Lzma86Enc.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/C/LzmaDec.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/C/LzmaEnc.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/C/LzmaLib.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/C/Ppmd7.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/C/Ppmd7Dec.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/C/Ppmd7Enc.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/C/Sha256.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/C/Sort.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/C/Xz.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/C/XzCrc64.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/C/XzCrc64Opt.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/C/XzDec.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/C/XzEnc.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/C/XzIn.c
+)
+
+set_property(TARGET lzma PROPERTY CXX_STANDARD 20)
+
+target_include_directories(lzma PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/C)
+
+target_compile_options(lzma PRIVATE -fPIC -D_7ZIP_ST)
