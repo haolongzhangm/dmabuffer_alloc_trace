@@ -39,9 +39,18 @@ class StaticString16;
 class String16
 {
 public:
+    /*
+     * Use String16(StaticLinkage) if you're statically linking against
+     * libutils and declaring an empty static String16, e.g.:
+     *
+     *   static String16 sAStaticEmptyString(String16::kEmptyString);
+     *   static String16 sAnotherStaticEmptyString(sAStaticEmptyString);
+     */
+    enum StaticLinkage { kEmptyString };
+
                                 String16();
+    explicit                    String16(StaticLinkage);
                                 String16(const String16& o);
-                                String16(String16&& o) noexcept;
                                 String16(const String16& o,
                                          size_t len,
                                          size_t begin=0);
@@ -70,7 +79,6 @@ public:
             status_t            append(const char16_t* other, size_t len);
 
     inline  String16&           operator=(const String16& other);
-            String16&           operator=(String16&& other) noexcept;
 
     inline  String16&           operator+=(const String16& other);
     inline  String16            operator+(const String16& other) const;
@@ -87,8 +95,12 @@ public:
 
             bool                contains(const char16_t* chrs) const;
 
+            status_t            makeLower();
+
             status_t            replaceAll(char16_t replaceThis,
                                            char16_t withThis);
+
+            status_t            remove(size_t len, size_t begin=0);
 
     inline  int                 compare(const String16& other) const;
 
@@ -174,6 +186,10 @@ protected:
 
     template <size_t N>
     explicit constexpr String16(const StaticData<N>& s) : mString(s.data) {}
+
+public:
+    template <size_t N>
+    explicit constexpr String16(const StaticString16<N>& s) : mString(s.mString) {}
 };
 
 // String16 can be trivially moved using memcpy() because moving does not
@@ -181,7 +197,7 @@ protected:
 ANDROID_TRIVIAL_MOVE_TRAIT(String16)
 
 static inline std::ostream& operator<<(std::ostream& os, const String16& str) {
-    os << String8(str);
+    os << String8(str).c_str();
     return os;
 }
 

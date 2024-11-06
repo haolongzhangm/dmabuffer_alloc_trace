@@ -2,11 +2,11 @@ cmake_minimum_required(VERSION "3.23.0")
 
 # 设置库的导入路径
 if (ANDROID_ABI MATCHES "arm64-v8a")
-    set(UTILSCALLSTACK_IMPORTED_LOCATION "${CMAKE_CURRENT_SOURCE_DIR}/lib64/libutilscallstack.so")
-    set(UTILS_IMPORTED_LOCATION "${CMAKE_CURRENT_SOURCE_DIR}/lib64/libutils.so")
+    set(UTILSCALLSTACK_IMPORTED_LOCATION "${CMAKE_CURRENT_SOURCE_DIR}/com.android.vndk.v30/lib64/libutilscallstack.so")
+    set(UTILS_IMPORTED_LOCATION "${CMAKE_CURRENT_SOURCE_DIR}/com.android.vndk.v30/lib64/libutils.so")
 else ()
-    set(UTILSCALLSTACK_IMPORTED_LOCATION "${CMAKE_CURRENT_SOURCE_DIR}/lib/libutilscallstack.so")
-    set(UTILS_IMPORTED_LOCATION "${CMAKE_CURRENT_SOURCE_DIR}/lib/libutils.so")
+    set(UTILSCALLSTACK_IMPORTED_LOCATION "${CMAKE_CURRENT_SOURCE_DIR}/com.android.vndk.v30/lib/libutilscallstack.so")
+    set(UTILS_IMPORTED_LOCATION "${CMAKE_CURRENT_SOURCE_DIR}/com.android.vndk.v30/lib/libutils.so")
 endif ()
 
 # 链接所需的库

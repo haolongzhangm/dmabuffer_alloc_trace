@@ -27,13 +27,13 @@ CMAKE_PARA_ANDROID="-DCMAKE_TOOLCHAIN_FILE=${NDK_ROOT}/build/cmake/android.toolc
 	-DANDROID_NDK=${NDK_ROOT} \
     -DANDROID_ABI=arm64-v8a \
     -DANDROID_TOOLCHAIN=clang++ \
-    -DANDROID_PLATFORM=android-28"
+    -DANDROID_PLATFORM=android-30"
 
 CMAKE_PARA_ARMV7="-DCMAKE_TOOLCHAIN_FILE=${NDK_ROOT}/build/cmake/android.toolchain.cmake \
     -DANDROID_NDK=${NDK_ROOT} \
     -DANDROID_ABI=armeabi-v7a \
     -DANDROID_TOOLCHAIN=clang++ \
-    -DANDROID_PLATFORM=android-28"
+    -DANDROID_PLATFORM=android-30"
 
 CMAKE_PARA=" -DCMAKE_INSTALL_PREFIX=${SRC_DIR} \
     -DCMAKE_BUILD_TYPE=Release -G Ninja"
