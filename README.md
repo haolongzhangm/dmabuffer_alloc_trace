@@ -47,7 +47,7 @@ use to get malloc and free backtrace, include dmabuffer by hook `ioctl` and `clo
   adb push out/lib/libcheckleak.so /data/local/tmp/checkleak/
   adb shell
   export LD_LIBRARY_PATH=/data/local/tmp/checkleak/:/system/lib64:/vendor/lib64:/apex/com.android.vndk.v30/lib64:/apex/com.android.runtime/lib64/
-  export LD_PRELOAD=/apex/com.android.runtime/lib64/libunwindstack.so:/apex/com.android.vndk.v30/lib64/libunwindstack.so:/apex/com.android.runtime/lib64/bionic/libc.so:/apex/com.android.runtime/lib64/libc_malloc_debug.so:/data/local/tmp/checkleak/libcheckleak.so
+  export LD_PRELOAD=/apex/com.android.vndk.v30/lib64/libunwindstack.so:/apex/com.android.runtime/lib64/libunwindstack.so:/apex/com.android.runtime/lib64/bionic/libc.so:/apex/com.android.runtime/lib64/libc_malloc_debug.so:/data/local/tmp/checkleak/libcheckleak.so
   
   start your test bin:
   LIBC_DEBUG_MALLOC_OPTIONS=backtrace you_test_bin
