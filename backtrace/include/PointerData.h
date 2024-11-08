@@ -79,6 +79,9 @@ public:
 
   bool Initialize(const Config& config);
 
+  bool ShouldBacktrace() { return backtrace_enabled_ == 1; }
+  static void ToggleBacktraceEnabled(int /*signum*/) { backtrace_enabled_.fetch_xor(1); }
+
   static size_t AddBacktrace(size_t num_frames, size_t size_bytes);
   static void RemoveBacktrace(size_t hash_index);
 
@@ -93,6 +96,8 @@ private:
 
   static void GetList(std::vector<ListInfoType>* list, bool only_with_backtrace);
   static void GetUniqueList(std::vector<ListInfoType>* list, bool only_with_backtrace);
+
+  static std::atomic_uint8_t backtrace_enabled_;
 
   static std::mutex pointer_mutex_;
   static std::unordered_map<uintptr_t, PointerInfoType> pointers_;

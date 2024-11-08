@@ -17,6 +17,8 @@ public:
     uint64_t options() const { return options_; }
 
     size_t backtrace_frames() const { return backtrace_frames_; }
+    size_t backtrace_enabled() const { return backtrace_enabled_; }
+    long backtrace_interval() const { return backtrace_interval_; }
     bool backtrace_dump_on_exit() const { return backtrace_dump_on_exit_; }
     const char* backtrace_dump_prefix() const { return backtrace_dump_prefix_; }
 
@@ -24,6 +26,9 @@ public:
     size_t backtrace_max_size_bytes() const { return backtrace_max_size_bytes_; }
 
 private:
+    bool backtrace_enabled_ = false;
+    long backtrace_interval_ = 0;
+
     size_t backtrace_frames_ = 0;
     bool backtrace_dump_on_exit_ = false;
     const char* backtrace_dump_prefix_;

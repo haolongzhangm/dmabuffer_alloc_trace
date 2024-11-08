@@ -17,6 +17,8 @@
 #include "android-base/stringprintf.h"
 #include "unwindstack/Unwinder.h"
 
+std::atomic_uint8_t PointerData::backtrace_enabled_ = 0;
+
 constexpr size_t kBacktraceEmptyIndex = 1;
 
 std::mutex PointerData::pointer_mutex_;
@@ -50,12 +52,31 @@ bool PointerData::Initialize(const Config& config) NO_THREAD_SAFETY_ANALYSIS {
   // a backtrace, but there was nothing recorded.
   cur_hash_index_ = kBacktraceEmptyIndex + 1;
 
+  // 设置信号处理函数
+  signal(SIGALRM, ToggleBacktraceEnabled);
+
+  backtrace_enabled_ = config.backtrace_enabled();
+
+  // 配置定时器
+  struct itimerval timer;
+  // 采样间隔
+  timer.it_interval.tv_sec = 0;
+  timer.it_interval.tv_usec = config.backtrace_interval();
+  // 延迟时间
+  timer.it_value.tv_sec = 0;
+  timer.it_value.tv_usec = config.backtrace_interval();
+
+  // 启动定时器
+  setitimer(ITIMER_REAL, &timer, nullptr);
+
   return true;
 }
 
 void PointerData::Add(const void* ptr, size_t pointer_size) {
   size_t hash_index = 0;
-  hash_index = AddBacktrace(g_debug->config().backtrace_frames(), pointer_size);
+  if (backtrace_enabled_) {
+    hash_index = AddBacktrace(g_debug->config().backtrace_frames(), pointer_size);
+  }
 
   std::lock_guard<std::mutex> pointer_guard(pointer_mutex_);
   // uintptr_t mangled_ptr = ManglePointer(reinterpret_cast<uintptr_t>(ptr));
