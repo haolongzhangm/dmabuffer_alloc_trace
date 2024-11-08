@@ -87,7 +87,7 @@ void PointerData::Add(const void* ptr, size_t pointer_size) {
 void PointerData::Remove(const void* ptr) {
   size_t hash_index;
   {
-    // std::lock_guard<std::mutex> pointer_guard(pointer_mutex_);
+    std::lock_guard<std::mutex> pointer_guard(pointer_mutex_);
     uintptr_t mangled_ptr = ManglePointer(reinterpret_cast<uintptr_t>(ptr));
     auto entry = pointers_.find(mangled_ptr);
     if (entry == pointers_.end()) {
@@ -106,7 +106,7 @@ void PointerData::RemoveBacktrace(size_t hash_index) {
     return;
   }
 
-  // std::lock_guard<std::mutex> frame_guard(frame_mutex_);
+  std::lock_guard<std::mutex> frame_guard(frame_mutex_);
   auto frame_entry = frames_.find(hash_index);
   if (frame_entry == frames_.end()) {
     // does not have matching frame data.
@@ -139,7 +139,7 @@ size_t PointerData::AddBacktrace(size_t num_frames, size_t size_bytes) {
   }
   FrameKeyType key{.num_frames = frames.size(), .frames = frames.data()};
   size_t hash_index;
-  // std::lock_guard<std::mutex> frame_guard(frame_mutex_);
+  std::lock_guard<std::mutex> frame_guard(frame_mutex_);
   auto entry = key_to_index_.find(key);
   if (entry == key_to_index_.end()) {
     hash_index = cur_hash_index_++;
