@@ -16,9 +16,9 @@ bool Config::Init() {
     backtrace_dump_prefix_ = DEFAULT_BACKTRACE_DUMP_PREFIX;
 
     // 如果开启 BACKTRACE_SPECIFIC_SIZES, 请指定内存申请的最大和最小 size
-    // options_ |= BACKTRACE_SPECIFIC_SIZES;
-    // backtrace_min_size_bytes_ = 1024;
-    // backtrace_max_size_bytes_ = SIZE_MAX;
+    options_ |= BACKTRACE_SPECIFIC_SIZES;
+    backtrace_min_size_bytes_ = 1024;
+    backtrace_max_size_bytes_ = SIZE_MAX;
 
     options_ |= BACKTRACE;
     options_ |= TRACK_ALLOCS;

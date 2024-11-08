@@ -4,6 +4,7 @@
 #include <cxxabi.h>
 #include <inttypes.h>
 
+#include <utility>
 #include <vector>
 #include <unordered_map>
 
@@ -162,7 +163,7 @@ size_t PointerData::AddBacktrace(size_t num_frames, size_t size_bytes) {
 void PointerData::GetList(std::vector<ListInfoType>* list, bool only_with_backtrace) {
   for (const auto& entry : pointers_) {
     FrameInfoType* frame_info = nullptr;
-    std::vector<unwindstack::FrameData>* backtrace_info = nullptr;
+    std::vector<std::string> backtrace_info;
     uintptr_t pointer = DemanglePointer(entry.first);
     size_t hash_index = entry.second.hash_index;
     if (hash_index > kBacktraceEmptyIndex) {
@@ -184,7 +185,42 @@ void PointerData::GetList(std::vector<ListInfoType>* list, bool only_with_backtr
         if (backtrace_entry == backtraces_info_.end()) {
           // Pointer --> hash_index does not exist.
         } else {
-          backtrace_info = &backtrace_entry->second;
+          for (const auto& info : backtraces_info_) {
+            std::vector<unwindstack::FrameData> frames = info.second;
+            std::string line;
+            for (size_t i = 0; i < frames.size(); ++i) {
+                const unwindstack::FrameData* info = &frames[i];
+                auto map_info = info->map_info;
+                
+                line = android::base::StringPrintf("#%0zd %" PRIx64 " ", i, info->rel_pc);
+                // so path
+                if (map_info == nullptr) {
+                  line += "<unknown>";
+                } else if (map_info->name().empty()) {
+                  line += android::base::StringPrintf("<anonymous:%" PRIx64 ">", map_info->start());
+                } else {
+                  line += map_info->name();
+                }
+
+                if (!info->function_name.empty()) {
+                  line += " (";
+                  char* demangled_name =
+                      abi::__cxa_demangle(info->function_name.c_str(), nullptr, nullptr, nullptr);
+                  if (demangled_name != nullptr) {
+                    line += demangled_name;
+                    free(demangled_name);
+                  } else {
+                    line += info->function_name;
+                  }
+                  if (info->function_offset != 0) {
+                    line += "+" + std::to_string(info->function_offset);
+                  }
+                  line += ")";
+                }
+                line + "\n";
+            }
+            backtrace_info.emplace_back(std::move(line));
+          }
         }
       }
     }
@@ -254,44 +290,15 @@ void PointerData::GetUniqueList(std::vector<ListInfoType>* list, bool only_with_
 void PointerData::DumpLiveToFile(int fd) {
     std::vector<ListInfoType> list;
 
+    std::lock_guard<std::mutex> pointer_guard(pointer_mutex_);
+    std::lock_guard<std::mutex> frame_guard(frame_mutex_);
     GetUniqueList(&list, false);
 
     for (const auto& info : list) {
-      std::cout << "\nmalloc size:" << info.size << std::endl;
-      std::vector<unwindstack::FrameData> frames = *info.backtrace_info;
-      for (size_t i = 0; i < frames.size(); ++i) {
-          const unwindstack::FrameData* info = &frames[i];
-          auto map_info = info->map_info;
-          
-          std::string line = android::base::StringPrintf("#%0zd %" PRIx64 " ", i, info->rel_pc);
-          // so path
-          if (map_info == nullptr) {
-            line += "<unknown>";
-          } else if (map_info->name().empty()) {
-            line += android::base::StringPrintf("<anonymous:%" PRIx64 ">", map_info->start());
-          } else {
-            line += map_info->name();
-          }
-
-          if (!info->function_name.empty()) {
-            line += " (";
-            char* demangled_name =
-                abi::__cxa_demangle(info->function_name.c_str(), nullptr, nullptr, nullptr);
-            if (demangled_name != nullptr) {
-              line += demangled_name;
-              free(demangled_name);
-            } else {
-              line += info->function_name;
-            }
-            if (info->function_offset != 0) {
-              line += "+" + std::to_string(info->function_offset);
-            }
-            line += ")";
-          }
-          line + "\n";
-          std::cout << line << std::endl;
-      }
+        std::cout << "malloc size:" << info.size << std::endl;
+        for (const auto& it : info.backtrace_info) {
+            std::cout << it << std::endl;
+        }
+        std::cout << std::endl << std::endl;   
     }
-
-
 }

@@ -72,7 +72,7 @@ struct ListInfoType {
   size_t size;
   bool zygote_child_alloc;
   FrameInfoType* frame_info;
-  std::vector<unwindstack::FrameData>* backtrace_info;
+  std::vector<std::string> backtrace_info;
 };
 
 class PointerData {
