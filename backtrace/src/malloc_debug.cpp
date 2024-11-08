@@ -13,6 +13,32 @@
 
 #include "memory_hook.h"
 
+class ScopedConcurrentLock {
+ public:
+  ScopedConcurrentLock() {
+    pthread_rwlock_rdlock(&lock_);
+  }
+  ~ScopedConcurrentLock() {
+    pthread_rwlock_unlock(&lock_);
+  }
+
+  static void Init() {
+    pthread_rwlockattr_t attr;
+    // Set the attribute so that when a write lock is pending, read locks are no
+    // longer granted.
+    pthread_rwlockattr_setkind_np(&attr, PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP);
+    pthread_rwlock_init(&lock_, &attr);
+  }
+
+  static void BlockAllOperations() {
+    pthread_rwlock_wrlock(&lock_);
+  }
+
+ private:
+  static pthread_rwlock_t lock_;
+};
+pthread_rwlock_t ScopedConcurrentLock::lock_;
+
 DebugData* g_debug;
 
 bool debug_initialize(void* init_space[]) {
@@ -43,6 +69,8 @@ bool debug_initialize(void* init_space[]) {
     }
     g_debug = debug;
 
+    ScopedConcurrentLock::Init();
+
     return true;
 }
 
@@ -50,6 +78,10 @@ void debug_finalize() {
     if (g_debug == nullptr) {
         return;
     }
+
+    // Make sure that there are no other threads doing debug allocations
+    // before we kill everything.
+    ScopedConcurrentLock::BlockAllOperations();
 
     // Turn off capturing allocations calls.
     DebugDisableSet(true);
@@ -64,6 +96,7 @@ void debug_finalize() {
 }
 
 void debug_dump_heap(const char* file_name) {
+    ScopedConcurrentLock lock;
     ScopedDisableDebugCalls disable;
 
     int fd = open(file_name, O_RDWR | O_CREAT | O_NOFOLLOW | O_TRUNC | O_CLOEXEC, 0644);
@@ -97,6 +130,7 @@ void* debug_malloc(size_t size) {
         return m_sys_malloc(size);
     }
 
+    ScopedConcurrentLock lock;
     ScopedDisableDebugCalls disable;
 
     if (size > PointerInfoType::MaxSize()) {
@@ -111,6 +145,8 @@ void debug_free(void* pointer) {
   if (DebugCallsDisabled() || pointer == nullptr) {
     return m_sys_free(pointer);
   }
+
+  ScopedConcurrentLock lock;
   ScopedDisableDebugCalls disable;
 
   InternalFree(pointer);
@@ -120,6 +156,8 @@ void* debug_realloc(void* pointer, size_t bytes) {
   if (DebugCallsDisabled()) {
     return m_sys_realloc(pointer, bytes);
   }
+
+  ScopedConcurrentLock lock;
   ScopedDisableDebugCalls disable;
 
   if (pointer == nullptr) {
@@ -153,6 +191,8 @@ void* debug_calloc(size_t nmemb, size_t bytes) {
   if (DebugCallsDisabled()) {
     return m_sys_calloc(nmemb, bytes);
   }
+
+  ScopedConcurrentLock lock;
   ScopedDisableDebugCalls disable;
 
   size_t size;
@@ -174,6 +214,8 @@ void* debug_memalign(size_t alignment, size_t bytes) {
   if (DebugCallsDisabled()) {
     return m_sys_memalign(alignment, bytes);
   }
+
+  ScopedConcurrentLock lock;
   ScopedDisableDebugCalls disable;
 
   if (bytes > PointerInfoType::MaxSize()) {
