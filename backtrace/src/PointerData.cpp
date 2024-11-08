@@ -17,7 +17,7 @@
 #include "android-base/stringprintf.h"
 #include "unwindstack/Unwinder.h"
 
-std::atomic_uint8_t PointerData::backtrace_enabled_ = 0;
+std::atomic_uint8_t PointerData::backtrace_enabled_ = true;
 
 constexpr size_t kBacktraceEmptyIndex = 1;
 
@@ -52,22 +52,22 @@ bool PointerData::Initialize(const Config& config) NO_THREAD_SAFETY_ANALYSIS {
   // a backtrace, but there was nothing recorded.
   cur_hash_index_ = kBacktraceEmptyIndex + 1;
 
-  // 设置信号处理函数
-  signal(SIGALRM, ToggleBacktraceEnabled);
+  if (config.backtrace_sampling()) {
+    // 设置信号处理函数
+    signal(SIGALRM, ToggleBacktraceEnabled);
 
-  backtrace_enabled_ = config.backtrace_enabled();
+    // 配置定时器
+    struct itimerval timer;
+    // 采样间隔
+    timer.it_interval.tv_sec = 0;
+    timer.it_interval.tv_usec = config.backtrace_interval();
+    // 延迟时间
+    timer.it_value.tv_sec = 0;
+    timer.it_value.tv_usec = config.backtrace_interval();
 
-  // 配置定时器
-  struct itimerval timer;
-  // 采样间隔
-  timer.it_interval.tv_sec = 0;
-  timer.it_interval.tv_usec = config.backtrace_interval();
-  // 延迟时间
-  timer.it_value.tv_sec = 0;
-  timer.it_value.tv_usec = config.backtrace_interval();
-
-  // 启动定时器
-  setitimer(ITIMER_REAL, &timer, nullptr);
+    // 启动定时器
+    setitimer(ITIMER_REAL, &timer, nullptr);
+  }
 
   return true;
 }
