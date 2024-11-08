@@ -21,17 +21,17 @@ std::atomic_uint8_t PointerData::backtrace_enabled_ = true;
 
 constexpr size_t kBacktraceEmptyIndex = 1;
 
-std::mutex PointerData::pointer_mutex_;
-std::unordered_map<uintptr_t, PointerInfoType> PointerData::pointers_ GUARDED_BY(PointerData::pointer_mutex_);
+// std::mutex PointerData::pointer_mutex_;
+// std::unordered_map<uintptr_t, PointerInfoType> PointerData::pointers_ GUARDED_BY(PointerData::pointer_mutex_);
 
-std::mutex PointerData::frame_mutex_;
-// 堆栈信息映射出 index
-std::unordered_map<FrameKeyType, size_t> PointerData::key_to_index_ GUARDED_BY(PointerData::frame_mutex_);
-// 存在的意义是同样的调用只记录一次堆栈
-std::unordered_map<size_t, FrameInfoType> PointerData::frames_ GUARDED_BY(PointerData::frame_mutex_);
-// 记录堆栈
-std::unordered_map<size_t, std::vector<unwindstack::FrameData>> PointerData::backtraces_info_ GUARDED_BY(PointerData::frame_mutex_);
-size_t PointerData::cur_hash_index_ GUARDED_BY(PointerData::frame_mutex_);
+// std::mutex PointerData::frame_mutex_;
+// // 堆栈信息映射出 index
+// std::unordered_map<FrameKeyType, size_t> PointerData::key_to_index_ GUARDED_BY(PointerData::frame_mutex_);
+// // 存在的意义是同样的调用只记录一次堆栈
+// std::unordered_map<size_t, FrameInfoType> PointerData::frames_ GUARDED_BY(PointerData::frame_mutex_);
+// // 记录堆栈
+// std::unordered_map<size_t, std::vector<unwindstack::FrameData>> PointerData::backtraces_info_ GUARDED_BY(PointerData::frame_mutex_);
+// size_t PointerData::cur_hash_index_ GUARDED_BY(PointerData::frame_mutex_);
 
 static inline bool ShouldBacktraceAllocSize(size_t size_bytes) {
   static bool only_backtrace_specific_sizes = g_debug->config().options() & BACKTRACE_SPECIFIC_SIZES;
@@ -79,15 +79,15 @@ void PointerData::Add(const void* ptr, size_t pointer_size) {
   }
 
   std::lock_guard<std::mutex> pointer_guard(pointer_mutex_);
-  // uintptr_t mangled_ptr = ManglePointer(reinterpret_cast<uintptr_t>(ptr));
-  // pointers_[mangled_ptr] =
-  //     PointerInfoType{PointerInfoType::GetEncodedSize(pointer_size), hash_index};
+  uintptr_t mangled_ptr = ManglePointer(reinterpret_cast<uintptr_t>(ptr));
+  pointers_[mangled_ptr] =
+      PointerInfoType{PointerInfoType::GetEncodedSize(pointer_size), hash_index};
 }
 
 void PointerData::Remove(const void* ptr) {
   size_t hash_index;
   {
-    std::lock_guard<std::mutex> pointer_guard(pointer_mutex_);
+    // std::lock_guard<std::mutex> pointer_guard(pointer_mutex_);
     uintptr_t mangled_ptr = ManglePointer(reinterpret_cast<uintptr_t>(ptr));
     auto entry = pointers_.find(mangled_ptr);
     if (entry == pointers_.end()) {
@@ -106,7 +106,7 @@ void PointerData::RemoveBacktrace(size_t hash_index) {
     return;
   }
 
-  std::lock_guard<std::mutex> frame_guard(frame_mutex_);
+  // std::lock_guard<std::mutex> frame_guard(frame_mutex_);
   auto frame_entry = frames_.find(hash_index);
   if (frame_entry == frames_.end()) {
     // does not have matching frame data.
@@ -137,25 +137,25 @@ size_t PointerData::AddBacktrace(size_t num_frames, size_t size_bytes) {
   } else {
     return kBacktraceEmptyIndex;
   }
-  // FrameKeyType key{.num_frames = frames.size(), .frames = frames.data()};
-  // size_t hash_index;
+  FrameKeyType key{.num_frames = frames.size(), .frames = frames.data()};
+  size_t hash_index;
   // std::lock_guard<std::mutex> frame_guard(frame_mutex_);
-  // auto entry = key_to_index_.find(key);
-  // if (entry == key_to_index_.end()) {
-  //   hash_index = cur_hash_index_++;
-  //   key.frames = frames.data();
-  //   key_to_index_.emplace(key, hash_index);
+  auto entry = key_to_index_.find(key);
+  if (entry == key_to_index_.end()) {
+    hash_index = cur_hash_index_++;
+    key.frames = frames.data();
+    key_to_index_.emplace(key, hash_index);
 
-  //   frames_.emplace(hash_index, FrameInfoType{.references = 1, .frames = std::move(frames)});
-  //   if (g_debug->config().options() & BACKTRACE) {
-  //     backtraces_info_.emplace(hash_index, std::move(frames_info));
-  //   }
-  // } else {
-  //   hash_index = entry->second;
-  //   FrameInfoType* frame_info = &frames_[hash_index];
-  //   frame_info->references++;
-  // }
-  return 0;
+    frames_.emplace(hash_index, FrameInfoType{.references = 1, .frames = std::move(frames)});
+    if (g_debug->config().options() & BACKTRACE) {
+      backtraces_info_.emplace(hash_index, std::move(frames_info));
+    }
+  } else {
+    hash_index = entry->second;
+    FrameInfoType* frame_info = &frames_[hash_index];
+    frame_info->references++;
+  }
+  return hash_index;
 }
 
 

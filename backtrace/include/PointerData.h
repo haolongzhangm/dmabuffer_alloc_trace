@@ -1,8 +1,10 @@
 #pragma once
 
 #include <stdint.h>
+#include <fcntl.h>
 
 #include <cstdio>
+#include <cstdlib>
 #include <functional>
 #include <vector>
 #include <unordered_map>
@@ -83,31 +85,31 @@ public:
   bool ShouldBacktrace() { return backtrace_enabled_ == 1; }
   static void ToggleBacktraceEnabled(int /*signum*/) { backtrace_enabled_.fetch_xor(1); }
 
-  static size_t AddBacktrace(size_t num_frames, size_t size_bytes);
-  static void RemoveBacktrace(size_t hash_index);
+   size_t AddBacktrace(size_t num_frames, size_t size_bytes);
+   void RemoveBacktrace(size_t hash_index);
 
-  static void Add(const void* pointer, size_t size);
-  static void Remove(const void* pointer);
+   void Add(const void* pointer, size_t size);
+   void Remove(const void* pointer);
 
-  static void DumpLiveToFile(int fd);
+   void DumpLiveToFile(int fd);
 
 private:
-  static inline uintptr_t ManglePointer(uintptr_t pointer) { return pointer ^ UINTPTR_MAX; }
-  static inline uintptr_t DemanglePointer(uintptr_t pointer) { return pointer ^ UINTPTR_MAX; }
+  inline uintptr_t ManglePointer(uintptr_t pointer) { return pointer ^ UINTPTR_MAX; }
+   inline uintptr_t DemanglePointer(uintptr_t pointer) { return pointer ^ UINTPTR_MAX; }
 
-  static void GetList(std::vector<ListInfoType>* list, bool only_with_backtrace);
-  static void GetUniqueList(std::vector<ListInfoType>* list, bool only_with_backtrace);
+   void GetList(std::vector<ListInfoType>* list, bool only_with_backtrace);
+   void GetUniqueList(std::vector<ListInfoType>* list, bool only_with_backtrace);
 
   static std::atomic_uint8_t backtrace_enabled_;
 
-  static std::mutex pointer_mutex_;
-  static std::unordered_map<uintptr_t, PointerInfoType> pointers_;
+   std::mutex pointer_mutex_;
+   std::unordered_map<uintptr_t, PointerInfoType> pointers_;
 
-  static std::mutex frame_mutex_;
-  static std::unordered_map<FrameKeyType, size_t> key_to_index_;
-  static std::unordered_map<size_t, FrameInfoType> frames_;
-  static std::unordered_map<size_t, std::vector<unwindstack::FrameData>> backtraces_info_;
-  static size_t cur_hash_index_;
+   std::mutex frame_mutex_;
+  std::unordered_map<FrameKeyType, size_t> key_to_index_;
+   std::unordered_map<size_t, FrameInfoType> frames_;
+   std::unordered_map<size_t, std::vector<unwindstack::FrameData>> backtraces_info_;
+   size_t cur_hash_index_;
 
   BIONIC_DISALLOW_COPY_AND_ASSIGN(PointerData);
 };

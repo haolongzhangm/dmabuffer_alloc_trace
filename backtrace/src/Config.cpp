@@ -7,7 +7,7 @@ static constexpr size_t DEFAULT_BACKTRACE_FRAMES = 16;
 static constexpr const char DEFAULT_BACKTRACE_DUMP_PREFIX[] = "/data/local/tmp/trace/backtrace_heap";
 
 bool Config::Init() {
-    backtrace_sampling_ = true;
+    backtrace_sampling_ = false;
     // 采用间隔，单位 us
     backtrace_interval_ = 500;
 

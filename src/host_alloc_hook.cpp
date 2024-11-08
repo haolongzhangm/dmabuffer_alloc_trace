@@ -18,9 +18,11 @@ public:
     void free(void* ptr);
 
     static AllocHook& inst();
-    std::aligned_storage<sizeof(DebugData), alignof(DebugData)>::type Db_storage;
-    std::aligned_storage<sizeof(PointerData), alignof(PointerData)>::type Pd_storage;
+    static std::aligned_storage<sizeof(DebugData), alignof(DebugData)>::type Db_storage;
+    static std::aligned_storage<sizeof(PointerData), alignof(PointerData)>::type Pd_storage;
 };
+std::aligned_storage<sizeof(DebugData), alignof(DebugData)>::type AllocHook::Db_storage;
+std::aligned_storage<sizeof(PointerData), alignof(PointerData)>::type AllocHook::Pd_storage;
 
 void* AllocHook::malloc(size_t size) {
     return debug_malloc(size);
