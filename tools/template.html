@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Memory Visulization</title>
-    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.2/d3.min.js"></script>
     <style>
         /* loading style. */
         @keyframes spin {
@@ -193,18 +193,11 @@ document.addEventListener('DOMContentLoaded', function() {
             .on("click", handleClick);
     }
 
-    function filterData(peakTime, traceData, maxFreeTime) {
+    function filterData(traceData, maxFreeTime) {
         document.getElementById('charts-container').innerHTML = '';
-        traceData.forEach(d => {
-            if (d.freeTime === 9223372036854775807) {
-                d.fill = "red";
-                d.freeTime = maxFreeTime;
-            }
-        });
-        const filteredData = traceData.filter(item => item.mallocTime <= peakTime && item.freeTime >= peakTime);
-        const xStart = d3.min(filteredData, d => d.mallocTime);
+        const xStart = d3.min(traceData, d => d.mallocTime);
         const xEnd = maxFreeTime;
-        const memPeak = d3.sum(filteredData, d => d.size);
+        const memPeak = d3.sum(traceData, d => d.size);
 
         const container = d3.select("#charts-container");
         const yScale = d3.scaleLinear()
@@ -228,7 +221,7 @@ document.addEventListener('DOMContentLoaded', function() {
             .call(xAxis)
             .attr('transform', `translate(9, 0)`);
 
-        updateChart(filteredData, container, yScale, xScale, xStart);
+        updateChart(traceData, container, yScale, xScale, xStart);
         document.getElementById('content').style.display = 'block';
     }
 
@@ -258,13 +251,12 @@ document.addEventListener('DOMContentLoaded', function() {
 		const popup = window.open("", "PopupWindow", `width=${width}, height=${height}, left=${left}, top=${top}`);
 		popup.document.body.innerHTML = "";
         var extractedData = d.map(function(line) {
-            var match = line.match(/#(\d+)\s+pc\s+([0-9a-fA-F]+)\s+(.*)/);
+            var match = line.match(/#(\d+)\s+([0-9a-fA-F]+)\s+(.*)/);
             if (match) {
                 return {
                     id: match[1],
                     address: match[2],
-                    library: match[3],
-                    function: match[4]
+                    library: match[3]
                 };
             } else {
                 return null;
@@ -324,49 +316,25 @@ document.addEventListener('DOMContentLoaded', function() {
     const traceText = traceScript.textContent;
     const lines = traceText.trim().split('\n');
     const traceData = [];
-    let flag = false;
-    let peakTime = 0;
-    let maxFreeTime = Number.MIN_SAFE_INTEGER;
-    let i = 0;
-    lines.forEach(line => {
+    let maxFreeTime = 30000;
+    lines.forEach((line, index) => {
         const trimmedLine = line.trim();
-        if (trimmedLine.startsWith("S")) {
-            const matches = trimmedLine.match(/^S(\d+)\s+A(\d+)\s+F(\d+)\s*$/);
-            if (matches) {
-                const size = parseInt(matches[1]);
-                flag = size > 1023;
-                if (flag) {
-                    i++;
-                    const fill = "lightgreen";
-                    const mallocTime = parseInt(matches[2]);
-                    const freeTime = parseInt(matches[3]);
-                    const entry = {
-                        size: size,
-                        mallocTime: mallocTime,
-                        freeTime: freeTime,
-                        fill: i % 2 === 0 ? "#6DC8F1" : "lightgreen",
-                        stack: []
-                    };
-                    if (freeTime !== 9223372036854775807 && freeTime > maxFreeTime) {
-                        maxFreeTime = freeTime;
-                    }
-                    traceData.push(entry);
-                }
-            } else {
-                console.error("Failed to match line:", line);
-            }
-        } else if (trimmedLine.startsWith("#") && flag) {
+
+        if (trimmedLine.startsWith("malloc")) {
+            const size = trimmedLine.match(/^malloc size:\s*(\d+)$/)[1];
+            traceData.push({
+                size,
+                mallocTime: 0,
+                freeTime: 30000,
+                fill: traceData.length % 2 === 0 ? "#6DC8F1" : "lightgreen",
+                stack: []
+            });
+        } 
+        else if (trimmedLine.startsWith("#")) {
             traceData[traceData.length - 1].stack.push(trimmedLine);
-        } else if (trimmedLine.startsWith("P")) {
-            const matches = trimmedLine.match(/^p(\d+)/i);
-            if (matches) {
-                peakTime = parseInt(matches[1]);
-            } else {
-                console.error("Failed to match peakTime");
-            }
-        }
+        } 
     });
-    filterData(peakTime, traceData, maxFreeTime);
+    filterData(traceData, maxFreeTime);
     document.getElementById('loading-container').style.display = 'none';
 });
 </script>
