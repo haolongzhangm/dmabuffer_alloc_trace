@@ -1,4 +1,5 @@
 #include <cstddef>
+#include <cstdint>
 #include <cstdio>
 #include <iostream>
 #include <cxxabi.h>
@@ -73,23 +74,31 @@ bool PointerData::Initialize(const Config& config) NO_THREAD_SAFETY_ANALYSIS {
   return true;
 }
 
-void PointerData::Add(const void* ptr, size_t pointer_size) {
+void PointerData::Add(uintptr_t ptr, size_t pointer_size) {
   size_t hash_index = 0;
   if (backtrace_enabled_) {
     hash_index = AddBacktrace(g_debug->config().backtrace_frames(), pointer_size);
   }
 
   std::lock_guard<std::mutex> pointer_guard(pointer_mutex_);
-  uintptr_t mangled_ptr = ManglePointer(reinterpret_cast<uintptr_t>(ptr));
+  uintptr_t mangled_ptr = ManglePointer(ptr);
   pointers_[mangled_ptr] =
       PointerInfoType{PointerInfoType::GetEncodedSize(pointer_size), hash_index};
 }
 
-void PointerData::Remove(const void* ptr) {
+void PointerData::AddHost(const void* ptr, size_t pointer_size) {
+  Add(reinterpret_cast<uintptr_t>(ptr), pointer_size);
+}
+
+void PointerData::AddDMA(const uint32_t ptr, size_t pointer_size) {
+  Add(static_cast<uintptr_t>(ptr), pointer_size);
+}
+
+void PointerData::Remove(uintptr_t ptr) {
   size_t hash_index;
   {
     std::lock_guard<std::mutex> pointer_guard(pointer_mutex_);
-    uintptr_t mangled_ptr = ManglePointer(reinterpret_cast<uintptr_t>(ptr));
+    uintptr_t mangled_ptr = ManglePointer((ptr));
     auto entry = pointers_.find(mangled_ptr);
     if (entry == pointers_.end()) {
       // No tracked pointer.
@@ -100,6 +109,14 @@ void PointerData::Remove(const void* ptr) {
   }
 
   RemoveBacktrace(hash_index);
+}
+
+void PointerData::RemoveHost(const void* ptr) {
+  Remove(reinterpret_cast<uintptr_t>(ptr));
+}
+
+void PointerData::RemoveDMA(const uint32_t ptr) {
+  Remove(static_cast<uintptr_t>(ptr));
 }
 
 void PointerData::RemoveBacktrace(size_t hash_index) {

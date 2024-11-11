@@ -11,3 +11,5 @@ void* debug_realloc(void* pointer, size_t bytes);
 void* debug_calloc(size_t nmemb, size_t bytes);
 void* debug_memalign(size_t alignment, size_t bytes);
 int debug_posix_memalign(void** memptr, size_t alignment, size_t size);
+int debug_ioctl(int fd, unsigned int request, void* arg);
+int debug_close(int fd);

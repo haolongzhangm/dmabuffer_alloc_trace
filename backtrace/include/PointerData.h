@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <fcntl.h>
 
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <functional>
@@ -88,8 +89,12 @@ public:
    size_t AddBacktrace(size_t num_frames, size_t size_bytes);
    void RemoveBacktrace(size_t hash_index);
 
-   void Add(const void* pointer, size_t size);
-   void Remove(const void* pointer);
+   void Add(uintptr_t pointer, size_t size);
+   void AddHost(const void* ptr, size_t pointer_size);
+   void AddDMA(const uint32_t ptr, size_t pointer_size);
+   void Remove(uintptr_t pointer);
+   void RemoveHost(const void* ptr);
+   void RemoveDMA(const uint32_t ptr);
 
    void DumpLiveToFile(int fd);
 

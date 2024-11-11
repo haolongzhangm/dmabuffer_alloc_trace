@@ -1,6 +1,7 @@
 #include <cstdlib>
 #include <dlfcn.h>
 #include <fcntl.h>
+#include <linux/dma-heap.h>
 #include <sys/param.h> // powerof2 ---> ((((x) - 1) & (x)) == 0)
 #include <unistd.h>
 
@@ -42,9 +43,18 @@ pthread_rwlock_t ScopedConcurrentLock::lock_;
 DebugData* g_debug;
 
 bool debug_initialize(void* init_space[]) {
+#ifdef __OHOS__
+    void* handle = dlopen("libc.so", RTLD_LAZY);
+    if (!handle) {
+        abort();
+    }
+#else
+    void* handle = RTLD_NEXT;
+#endif
+
 #define RESOLVE(name)                                                   \
     do {                                                                \
-        auto addr = dlsym(RTLD_NEXT, #name);                            \
+        auto addr = dlsym(handle, #name);                               \
         if (!addr) {                                                    \
             abort();                                                    \
         }                                                               \
@@ -56,6 +66,8 @@ bool debug_initialize(void* init_space[]) {
     RESOLVE(realloc);
     RESOLVE(memalign);
     RESOLVE(posix_memalign);
+    RESOLVE(ioctl);
+    RESOLVE(close);
 #undef RESOLVE
 
     if (!DebugDisableInitialize()) {
@@ -111,7 +123,7 @@ void debug_dump_heap(const char* file_name) {
 static void* InternalMalloc(size_t size) {
     void* result = m_sys_malloc(size);
     if (g_debug->TrackPointers()) {
-      g_debug->pointer->Add(result, size);
+      g_debug->pointer->AddHost(result, size);
     }
 
     return result;
@@ -119,7 +131,7 @@ static void* InternalMalloc(size_t size) {
 
 static void InternalFree(void* pointer) {
   if (g_debug->TrackPointers()) {
-    g_debug->pointer->Remove(pointer);
+    g_debug->pointer->RemoveHost(pointer);
   }
   m_sys_free(pointer);
 }
@@ -175,13 +187,13 @@ void* debug_realloc(void* pointer, size_t bytes) {
   }
 
   if (g_debug->TrackPointers()) {
-    g_debug->pointer->Remove(pointer);
+    g_debug->pointer->RemoveHost(pointer);
   }
 
   void* new_pointer = m_sys_realloc(pointer, bytes);
 
   if (g_debug->TrackPointers()) {
-    g_debug->pointer->Add(new_pointer, bytes);
+    g_debug->pointer->AddHost(new_pointer, bytes);
   }
 
   return new_pointer;
@@ -204,7 +216,7 @@ void* debug_calloc(size_t nmemb, size_t bytes) {
 
   void* pointer = m_sys_calloc(1, size);
   if (pointer != nullptr && g_debug->TrackPointers()) {
-    g_debug->pointer->Add(pointer, size);
+    g_debug->pointer->AddHost(pointer, size);
   }
 
   return pointer;
@@ -226,7 +238,7 @@ void* debug_memalign(size_t alignment, size_t bytes) {
   void* pointer = m_sys_memalign(alignment, bytes);
 
   if (pointer != nullptr && g_debug->TrackPointers()) {
-      g_debug->pointer->Add(pointer, bytes);
+      g_debug->pointer->AddHost(pointer, bytes);
   }
 
   return pointer;
@@ -244,4 +256,38 @@ int debug_posix_memalign(void** memptr, size_t alignment, size_t size) {
   *memptr = debug_memalign(alignment, size);
   errno = saved_errno;
   return (*memptr != nullptr) ? 0 : ENOMEM;
+}
+
+int debug_ioctl(int fd, unsigned int request, void* arg) {
+  if (DebugCallsDisabled()) {
+    return m_sys_ioctl(fd, request, arg);
+  }
+
+  ScopedConcurrentLock lock;
+  ScopedDisableDebugCalls disable;
+
+  int ret = m_sys_ioctl(fd, request, arg);
+  if (request == DMA_HEAP_IOCTL_ALLOC) {
+      struct dma_heap_allocation_data* heap_data = (struct dma_heap_allocation_data*)arg;
+      if (g_debug->TrackPointers()) {
+        g_debug->pointer->AddDMA(heap_data->fd, heap_data->len);
+      }
+  }
+
+  return ret;
+}
+
+int debug_close(int fd) {
+  if (DebugCallsDisabled() || fd <= 0) {
+    return m_sys_close(fd);
+  }
+
+  ScopedConcurrentLock lock;
+  ScopedDisableDebugCalls disable;
+
+  if (g_debug->TrackPointers()) {
+    g_debug->pointer->RemoveDMA(fd);
+  }
+
+  return m_sys_close(fd);
 }

@@ -7,3 +7,5 @@ extern void* (*m_sys_calloc)(size_t, size_t);
 extern void* (*m_sys_realloc)(void*, size_t);
 extern void* (*m_sys_memalign)(size_t, size_t);
 extern int (*m_sys_posix_memalign)(void**, size_t, size_t);
+extern int (*m_sys_ioctl)(int fd, unsigned int request, ...);
+extern int (*m_sys_close)(int fd);
