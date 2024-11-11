@@ -27,7 +27,6 @@
  */
 
 #include <cxxabi.h>
-#include <inttypes.h>
 #include <pthread.h>
 #include <stdint.h>
 
@@ -39,12 +38,6 @@
 #include <unwindstack/Unwinder.h>
 
 #include "UnwindBacktrace.h"
-
-#if defined(__LP64__)
-#define PAD_PTR "016" PRIx64
-#else
-#define PAD_PTR "08" PRIx64
-#endif
 
 bool Unwind(std::vector<uintptr_t>* frames, std::vector<unwindstack::FrameData>* frame_info,
             size_t max_frames) {

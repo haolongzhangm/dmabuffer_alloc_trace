@@ -1,8 +1,7 @@
 #pragma once
 
 #include <stdint.h>
-
-#include <string>
+#include <cstddef>
 
 constexpr uint64_t ZYGOTE_CHILD = 0x0; // zygote 创建的子进程：true-> 0x1, false -> 0x0
 constexpr uint64_t BACKTRACE = 0x2; // 记录堆栈
@@ -25,6 +24,9 @@ public:
     size_t backtrace_min_size_bytes() const { return backtrace_min_size_bytes_; }
     size_t backtrace_max_size_bytes() const { return backtrace_max_size_bytes_; }
 
+    size_t backtrace_dump_peak_val() const { return backtrace_dump_peak_val_; }
+    size_t backtrace_dump_peak_increment() const { return backtrace_dump_peak_increment_; }
+
 private:
     bool backtrace_sampling_ = false;
     long backtrace_interval_ = 0;
@@ -35,6 +37,9 @@ private:
 
     size_t backtrace_min_size_bytes_ = 0;
     size_t backtrace_max_size_bytes_ = 0;
+
+    size_t backtrace_dump_peak_val_ = 0;
+    size_t backtrace_dump_peak_increment_ = 0;
 
     uint64_t options_ = 0;
 };

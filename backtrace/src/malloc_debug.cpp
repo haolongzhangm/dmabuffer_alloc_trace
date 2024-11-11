@@ -99,7 +99,7 @@ void debug_finalize() {
     DebugDisableSet(true);
 
     if ((g_debug->config().options() & BACKTRACE) && g_debug->config().backtrace_dump_on_exit()) {
-        debug_dump_heap(android::base::StringPrintf("%s.txt",
+        debug_dump_heap(android::base::StringPrintf("%s.exit.txt",
                                                     g_debug->config().backtrace_dump_prefix()).c_str());
     }
 

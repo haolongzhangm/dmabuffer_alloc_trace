@@ -1,39 +1,19 @@
+#include <algorithm>
 #include <cstddef>
-#include <cstdint>
 #include <cstdio>
-#include <iostream>
+#include <mutex>
 #include <cxxabi.h>
 #include <inttypes.h>
 
-#include <utility>
-#include <vector>
-#include <unordered_map>
-
-// GUARDED_BY define
-#include <thread_annotations.h>
+#include "android-base/stringprintf.h"
 
 #include "Config.h"
 #include "DebugData.h"
-#include "PointerData.h"
 #include "UnwindBacktrace.h"
-#include "android-base/stringprintf.h"
-#include "unwindstack/Unwinder.h"
+#include "PointerData.h"
 
 std::atomic_uint8_t PointerData::backtrace_enabled_ = true;
-
 constexpr size_t kBacktraceEmptyIndex = 1;
-
-// std::mutex PointerData::pointer_mutex_;
-// std::unordered_map<uintptr_t, PointerInfoType> PointerData::pointers_ GUARDED_BY(PointerData::pointer_mutex_);
-
-// std::mutex PointerData::frame_mutex_;
-// // 堆栈信息映射出 index
-// std::unordered_map<FrameKeyType, size_t> PointerData::key_to_index_ GUARDED_BY(PointerData::frame_mutex_);
-// // 存在的意义是同样的调用只记录一次堆栈
-// std::unordered_map<size_t, FrameInfoType> PointerData::frames_ GUARDED_BY(PointerData::frame_mutex_);
-// // 记录堆栈
-// std::unordered_map<size_t, std::vector<unwindstack::FrameData>> PointerData::backtraces_info_ GUARDED_BY(PointerData::frame_mutex_);
-// size_t PointerData::cur_hash_index_ GUARDED_BY(PointerData::frame_mutex_);
 
 static inline bool ShouldBacktraceAllocSize(size_t size_bytes) {
   static bool only_backtrace_specific_sizes = g_debug->config().options() & BACKTRACE_SPECIFIC_SIZES;
@@ -46,13 +26,16 @@ static inline bool ShouldBacktraceAllocSize(size_t size_bytes) {
   return size_bytes >= min_size_bytes && size_bytes <= max_size_bytes;
 }
 
-bool PointerData::Initialize(const Config& config) NO_THREAD_SAFETY_ANALYSIS {
+bool PointerData::Initialize(const Config& config) {
   pointers_.clear();
   key_to_index_.clear();
   frames_.clear();
   // A hash index of kBacktraceEmptyIndex indicates that we tried to get
   // a backtrace, but there was nothing recorded.
   cur_hash_index_ = kBacktraceEmptyIndex + 1;
+  current_used = current_host = current_dma = 0;
+  peak_tot = peak_host = peak_dma = 0;
+  peak_needs_update = false;
 
   if (config.backtrace_sampling()) {
     // 设置信号处理函数
@@ -84,17 +67,35 @@ void PointerData::Add(uintptr_t ptr, size_t pointer_size) {
   uintptr_t mangled_ptr = ManglePointer(ptr);
   pointers_[mangled_ptr] =
       PointerInfoType{PointerInfoType::GetEncodedSize(pointer_size), hash_index};
+  current_used += pointer_size;
+
+  if (peak_tot < current_used) {
+    peak_tot = current_used;
+    if (peak_tot > g_debug->config().backtrace_dump_peak_val()) {
+      peak_needs_update = true;
+    }
+  }
 }
 
 void PointerData::AddHost(const void* ptr, size_t pointer_size) {
   Add(reinterpret_cast<uintptr_t>(ptr), pointer_size);
+  std::lock_guard<std::mutex> pointer_guard(pointer_mutex_);
+  current_host += pointer_size;
+  if (current_host > peak_host) {
+    peak_host = current_host;
+  }
 }
 
 void PointerData::AddDMA(const uint32_t ptr, size_t pointer_size) {
   Add(static_cast<uintptr_t>(ptr), pointer_size);
+  std::lock_guard<std::mutex> pointer_guard(pointer_mutex_);
+  current_dma += pointer_size;
+  if (current_dma > peak_dma) {
+    peak_dma = current_dma;
+  }
 }
 
-void PointerData::Remove(uintptr_t ptr) {
+void PointerData::Remove(uintptr_t ptr, bool is_dma) {
   size_t hash_index;
   {
     std::lock_guard<std::mutex> pointer_guard(pointer_mutex_);
@@ -104,6 +105,20 @@ void PointerData::Remove(uintptr_t ptr) {
       // No tracked pointer.
       return;
     }
+
+    current_used -= entry->second.size;
+    if (peak_needs_update) {
+      size_t dump_peak_increment = g_debug->config().backtrace_dump_peak_increment();
+      if ((g_debug->config().options() & RECORD_MEMORY_PEAK) && entry->second.size > dump_peak_increment) {
+        std::lock_guard<std::mutex> frame_guard(frame_mutex_);
+        list.clear();
+        GetUniqueList(&list, false);
+      }
+      peak_needs_update = false;
+    }
+
+    size_t* target = is_dma ? &current_dma : &current_host;
+    *target -= entry->second.size;
     hash_index = entry->second.hash_index;
     pointers_.erase(mangled_ptr);
   }
@@ -112,11 +127,11 @@ void PointerData::Remove(uintptr_t ptr) {
 }
 
 void PointerData::RemoveHost(const void* ptr) {
-  Remove(reinterpret_cast<uintptr_t>(ptr));
+  Remove(reinterpret_cast<uintptr_t>(ptr), false);
 }
 
 void PointerData::RemoveDMA(const uint32_t ptr) {
-  Remove(static_cast<uintptr_t>(ptr));
+  Remove(static_cast<uintptr_t>(ptr), true);
 }
 
 void PointerData::RemoveBacktrace(size_t hash_index) {
@@ -180,7 +195,7 @@ size_t PointerData::AddBacktrace(size_t num_frames, size_t size_bytes) {
 void PointerData::GetList(std::vector<ListInfoType>* list, bool only_with_backtrace) {
   for (const auto& entry : pointers_) {
     FrameInfoType* frame_info = nullptr;
-    std::vector<std::string> backtrace_info;
+    std::vector<unwindstack::FrameData> backtrace_info;
     uintptr_t pointer = DemanglePointer(entry.first);
     size_t hash_index = entry.second.hash_index;
     if (hash_index > kBacktraceEmptyIndex) {
@@ -202,51 +217,18 @@ void PointerData::GetList(std::vector<ListInfoType>* list, bool only_with_backtr
         if (backtrace_entry == backtraces_info_.end()) {
           // Pointer --> hash_index does not exist.
         } else {
-          for (const auto& info : backtraces_info_) {
-            std::vector<unwindstack::FrameData> frames = info.second;
-            std::string line;
-            for (size_t i = 0; i < frames.size(); ++i) {
-                const unwindstack::FrameData* info = &frames[i];
-                auto map_info = info->map_info;
-                
-                line = android::base::StringPrintf("#%0zd %" PRIx64 " ", i, info->rel_pc);
-                // so path
-                if (map_info == nullptr) {
-                  line += "<unknown>";
-                } else if (map_info->name().empty()) {
-                  line += android::base::StringPrintf("<anonymous:%" PRIx64 ">", map_info->start());
-                } else {
-                  line += map_info->name();
-                }
-
-                if (!info->function_name.empty()) {
-                  line += " (";
-                  char* demangled_name =
-                      abi::__cxa_demangle(info->function_name.c_str(), nullptr, nullptr, nullptr);
-                  if (demangled_name != nullptr) {
-                    line += demangled_name;
-                    free(demangled_name);
-                  } else {
-                    line += info->function_name;
-                  }
-                  if (info->function_offset != 0) {
-                    line += "+" + std::to_string(info->function_offset);
-                  }
-                  line += ")";
-                }
-                line + "\n";
-            }
-            backtrace_info.emplace_back(std::move(line));
-          }
+          backtrace_info.resize(backtrace_entry->second.size());
+          std::copy(backtrace_entry->second.begin(), backtrace_entry->second.end(), backtrace_info.begin());
         }
       }
+
+      list->emplace_back(ListInfoType{pointer, 1, entry.second.RealSize(),
+                                entry.second.ZygoteChildAlloc(), frame_info, std::move(backtrace_info)});
     }
+
     if (hash_index == 0 && only_with_backtrace) {
       continue;
     }
-
-    list->emplace_back(ListInfoType{pointer, 1, entry.second.RealSize(),
-                                    entry.second.ZygoteChildAlloc(), frame_info, backtrace_info});
   }
 
   // Sort by the size of the allocation.
@@ -305,17 +287,49 @@ void PointerData::GetUniqueList(std::vector<ListInfoType>* list, bool only_with_
 }
 
 void PointerData::DumpLiveToFile(int fd) {
-    std::vector<ListInfoType> list;
-
-    std::lock_guard<std::mutex> pointer_guard(pointer_mutex_);
-    std::lock_guard<std::mutex> frame_guard(frame_mutex_);
+  std::lock_guard<std::mutex> pointer_guard(pointer_mutex_);
+  std::lock_guard<std::mutex> frame_guard(frame_mutex_);
+  printf("\n+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
+  printf("host peak used: %zuMB, dma peak used %zuMB, peak used: %zuMB\n\n", peak_host / 1024 / 1024, peak_dma / 1024 / 1024, peak_tot / 1024 / 1024);
+  // 如果不打印峰值，进程结束时仍未释放的内存
+  if (!(g_debug->config().options() & RECORD_MEMORY_PEAK)) {
+    list.clear();
     GetUniqueList(&list, false);
+  }
 
-    for (const auto& info : list) {
-        std::cout << "malloc size:" << info.size << std::endl;
-        for (const auto& it : info.backtrace_info) {
-            std::cout << it << std::endl;
+  for (const auto& info : list) {
+    dprintf(fd, "malloc size: %zu\n", info.size);
+    for (size_t i = 0; i < info.backtrace_info.size(); ++i) {
+      const unwindstack::FrameData* frame = &info.backtrace_info[i];
+      auto map_info = frame->map_info;
+      
+      std::string line = android::base::StringPrintf("#%0zd %" PRIx64 " ", i, frame->rel_pc);
+      // so path
+      if (map_info == nullptr) {
+        line += "<unknown>";
+      } else if (map_info->name().empty()) {
+        line += android::base::StringPrintf("<anonymous:%" PRIx64 ">", map_info->start());
+      } else {
+        line += map_info->name();
+      }
+
+      if (!frame->function_name.empty()) {
+        line += " (";
+        char* demangled_name =
+            abi::__cxa_demangle(frame->function_name.c_str(), nullptr, nullptr, nullptr);
+        if (demangled_name != nullptr) {
+          line += demangled_name;
+          free(demangled_name);
+        } else {
+          line += frame->function_name;
         }
-        std::cout << std::endl << std::endl;   
+        if (frame->function_offset != 0) {
+          line += "+" + std::to_string(frame->function_offset);
+        }
+        line += ")";
+      }
+      dprintf(fd, "%s\n", line.c_str());
     }
+    dprintf(fd, "\n");
+  }
 }

@@ -6,7 +6,6 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#include <functional>
 #include <vector>
 #include <unordered_map>
 #include <mutex>
@@ -73,7 +72,7 @@ struct ListInfoType {
   size_t size;
   bool zygote_child_alloc;
   FrameInfoType* frame_info;
-  std::vector<std::string> backtrace_info;
+  std::vector<unwindstack::FrameData> backtrace_info;
 };
 
 class PointerData {
@@ -86,35 +85,40 @@ public:
   bool ShouldBacktrace() { return backtrace_enabled_ == 1; }
   static void ToggleBacktraceEnabled(int /*signum*/) { backtrace_enabled_.fetch_xor(1); }
 
-   size_t AddBacktrace(size_t num_frames, size_t size_bytes);
-   void RemoveBacktrace(size_t hash_index);
+  size_t AddBacktrace(size_t num_frames, size_t size_bytes);
+  void RemoveBacktrace(size_t hash_index);
 
-   void Add(uintptr_t pointer, size_t size);
-   void AddHost(const void* ptr, size_t pointer_size);
-   void AddDMA(const uint32_t ptr, size_t pointer_size);
-   void Remove(uintptr_t pointer);
-   void RemoveHost(const void* ptr);
-   void RemoveDMA(const uint32_t ptr);
+  void Add(uintptr_t pointer, size_t size);
+  void AddHost(const void* ptr, size_t pointer_size);
+  void AddDMA(const uint32_t ptr, size_t pointer_size);
+  void Remove(uintptr_t pointer, bool is_dma);
+  void RemoveHost(const void* ptr);
+  void RemoveDMA(const uint32_t ptr);
 
-   void DumpLiveToFile(int fd);
+  void DumpLiveToFile(int fd);
 
 private:
   inline uintptr_t ManglePointer(uintptr_t pointer) { return pointer ^ UINTPTR_MAX; }
-   inline uintptr_t DemanglePointer(uintptr_t pointer) { return pointer ^ UINTPTR_MAX; }
+  inline uintptr_t DemanglePointer(uintptr_t pointer) { return pointer ^ UINTPTR_MAX; }
 
-   void GetList(std::vector<ListInfoType>* list, bool only_with_backtrace);
-   void GetUniqueList(std::vector<ListInfoType>* list, bool only_with_backtrace);
+  void GetList(std::vector<ListInfoType>* list, bool only_with_backtrace);
+  void GetUniqueList(std::vector<ListInfoType>* list, bool only_with_backtrace);
 
   static std::atomic_uint8_t backtrace_enabled_;
 
-   std::mutex pointer_mutex_;
-   std::unordered_map<uintptr_t, PointerInfoType> pointers_;
+  std::mutex pointer_mutex_;
+  std::unordered_map<uintptr_t, PointerInfoType> pointers_;
 
-   std::mutex frame_mutex_;
+  std::mutex frame_mutex_;
   std::unordered_map<FrameKeyType, size_t> key_to_index_;
-   std::unordered_map<size_t, FrameInfoType> frames_;
-   std::unordered_map<size_t, std::vector<unwindstack::FrameData>> backtraces_info_;
-   size_t cur_hash_index_;
+  std::unordered_map<size_t, FrameInfoType> frames_;
+  std::unordered_map<size_t, std::vector<unwindstack::FrameData>> backtraces_info_;
+  size_t cur_hash_index_;
+
+  bool peak_needs_update;
+  size_t current_used, current_host, current_dma;
+  size_t peak_tot, peak_host, peak_dma;
+  std::vector<ListInfoType> list;
 
   BIONIC_DISALLOW_COPY_AND_ASSIGN(PointerData);
 };
