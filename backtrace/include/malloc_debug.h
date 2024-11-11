@@ -1,0 +1,13 @@
+#pragma once
+
+#include <cstddef>
+
+bool debug_initialize(void* init_space[]);
+void debug_finalize();
+void debug_dump_heap(const char* file_name);
+void* debug_malloc(size_t size);
+void debug_free(void* pointer);
+void* debug_realloc(void* pointer, size_t bytes);
+void* debug_calloc(size_t nmemb, size_t bytes);
+void* debug_memalign(size_t alignment, size_t bytes);
+int debug_posix_memalign(void** memptr, size_t alignment, size_t size);
