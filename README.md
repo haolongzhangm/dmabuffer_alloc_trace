@@ -7,10 +7,14 @@ use to get malloc and free backtrace, include dmabuffer by hook `ioctl` and `clo
   * ./build_android.sh [armeabi-v7a]
 
 * how to use
-
+  * adb shell mkdir `path`, where `path` is the output path for the unwindstack, default: `/data/local/tmp/trace`
+  * Config Options at `/dmabuffer_alloc_trace/backtrace/src/Config.cpp`
   * LD_PRELOAD=liballoc_hook.so LD_LIBRARY_PATH=. ls
   * then replace `ls` to you real command
 
+* how to visualize
+  * adb pull `path` `dest`
+  * python3 /dmabuffer_alloc_trace/tools/merge_trace.py `dest/xxxx.txt` `xxx.html`
   
 # libcheckleak.so
 
