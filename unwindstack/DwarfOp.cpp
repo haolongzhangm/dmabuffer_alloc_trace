@@ -28,6 +28,7 @@
 #include <unwindstack/Memory.h>
 #include <unwindstack/Regs.h>
 
+#include "DwarfEncoding.h"
 #include "DwarfOp.h"
 
 namespace unwindstack {

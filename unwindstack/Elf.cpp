@@ -15,7 +15,6 @@
  */
 
 #include <elf.h>
-#include <inttypes.h>
 #include <string.h>
 #include <sys/mman.h>
 

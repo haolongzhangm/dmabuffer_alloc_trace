@@ -29,6 +29,7 @@
 #ifndef _LIBUNWINDSTACK_USER_MIPS64_H
 #define _LIBUNWINDSTACK_USER_MIPS64_H
 
+#include <cstdint>
 namespace unwindstack {
 
 enum Mips64UserReg : uint16_t {

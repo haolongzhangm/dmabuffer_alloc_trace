@@ -35,13 +35,13 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <string>
 
 #include <android-base/unique_fd.h>
 
 #include <unwindstack/Log.h>
 #include <unwindstack/Memory.h>
 
-#include "Check.h"
 #include "MemoryBuffer.h"
 #include "MemoryCache.h"
 #include "MemoryFileAtOffset.h"
@@ -362,13 +362,7 @@ size_t MemoryRemote::Read(uint64_t addr, void* dst, size_t size) {
 }
 
 size_t MemoryLocal::Read(uint64_t addr, void* dst, size_t size) {
-  // Prefer process_vm_read, try it first. If it doesn't work, use direct memory read.
-  size_t result = ProcessVmRead(getpid(), addr, dst, size);
-  if (!result && size) {
-    memcpy(dst, (void *)addr, size);
-    result = size;
-  }
-  return result;
+  return ProcessVmRead(getpid(), addr, dst, size);
 }
 
 MemoryRange::MemoryRange(const std::shared_ptr<Memory>& memory, uint64_t begin, uint64_t length,
@@ -437,6 +431,16 @@ bool MemoryOffline::Init(const std::string& file, uint64_t offset) {
   }
 
   memory_ = std::make_unique<MemoryRange>(memory_file, sizeof(start), size, start);
+  return true;
+}
+
+bool MemoryOffline::Init(const std::string& file, uint64_t offset, uint64_t start, uint64_t size) {
+  auto memory_file = std::make_shared<MemoryFileAtOffset>();
+  if (!memory_file->Init(file, offset)) {
+    return false;
+  }
+
+  memory_ = std::make_unique<MemoryRange>(memory_file, 0, size, start);
   return true;
 }
 
@@ -577,6 +581,10 @@ size_t MemoryThreadCache::CachedRead(uint64_t addr, void* dst, size_t size) {
 }
 
 void MemoryThreadCache::Clear() {
+  if (!thread_cache_) {
+    return;
+  }
+
   CacheDataType* cache = reinterpret_cast<CacheDataType*>(pthread_getspecific(*thread_cache_));
   if (cache != nullptr) {
     delete cache;

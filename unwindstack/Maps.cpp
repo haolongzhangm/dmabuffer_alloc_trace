@@ -14,9 +14,7 @@
  * limitations under the License.
  */
 
-#include <errno.h>
 #include <fcntl.h>
-#include <inttypes.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -28,7 +26,6 @@
 #include <procinfo/process_map.h>
 
 #include <algorithm>
-#include <cctype>
 #include <memory>
 #include <string>
 #include <vector>

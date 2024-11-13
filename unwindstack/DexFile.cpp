@@ -23,7 +23,6 @@
 #include <memory>
 
 #define LOG_TAG "unwind"
-#include <log/log.h>
 
 #include <android-base/unique_fd.h>
 #include <art_api/dex_file_support.h>

@@ -26,6 +26,8 @@
 
 namespace unwindstack {
 
+class MemoryCacheBase;
+
 class Memory {
  public:
   Memory() = default;
@@ -38,6 +40,8 @@ class Memory {
                                                      uint64_t end);
   static std::unique_ptr<Memory> CreateFileMemory(const std::string& path, uint64_t offset,
                                                   uint64_t size = UINT64_MAX);
+
+  virtual MemoryCacheBase* AsMemoryCacheBase() { return nullptr; }
 
   virtual bool ReadString(uint64_t addr, std::string* dst, size_t max_read);
 

@@ -20,8 +20,6 @@
 #include "DexFile.h"
 #endif
 
-#include "GlobalDebugImpl.h"
-
 namespace unwindstack {
 
 #if defined(DEXFILE_SUPPORT)

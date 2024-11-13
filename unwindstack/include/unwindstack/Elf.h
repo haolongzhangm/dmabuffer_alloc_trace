@@ -23,7 +23,6 @@
 #include <mutex>
 #include <string>
 #include <unordered_map>
-#include <utility>
 
 #include <unwindstack/Arch.h>
 #include <unwindstack/ElfInterface.h>

@@ -34,6 +34,10 @@ class MemoryCacheBase : public Memory {
   MemoryCacheBase(Memory* memory) : impl_(memory) {}
   virtual ~MemoryCacheBase() = default;
 
+  MemoryCacheBase* AsMemoryCacheBase() override { return this; }
+
+  const std::shared_ptr<Memory>& UnderlyingMemory() { return impl_; }
+
   size_t Read(uint64_t addr, void* dst, size_t size) override {
     // Only look at the cache for small reads.
     if (size > 64) {
@@ -55,7 +59,7 @@ class MemoryCacheBase : public Memory {
 
   size_t InternalCachedRead(uint64_t addr, void* dst, size_t size, CacheDataType* cache);
 
-  std::unique_ptr<Memory> impl_;
+  std::shared_ptr<Memory> impl_;
 };
 
 class MemoryCache : public MemoryCacheBase {

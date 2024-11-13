@@ -24,7 +24,6 @@
 
 #include <unwindstack/Memory.h>
 
-#include "Check.h"
 #include "Symbols.h"
 
 namespace unwindstack {

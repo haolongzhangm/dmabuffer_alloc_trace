@@ -18,6 +18,7 @@
 #define _LIBUNWINDSTACK_ARCH_H
 
 #include <stddef.h>
+#include <cstdint>
 
 namespace unwindstack {
 

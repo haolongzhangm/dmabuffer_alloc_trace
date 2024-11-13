@@ -22,7 +22,6 @@
 #include <string>
 
 #include "android-base/macros.h"
-#include "android-base/off64_t.h"
 #include "android-base/unique_fd.h"
 
 #if !defined(_WIN32) && !defined(O_BINARY)

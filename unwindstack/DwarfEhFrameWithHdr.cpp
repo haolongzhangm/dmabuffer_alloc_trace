@@ -20,7 +20,6 @@
 #include <unwindstack/DwarfStructs.h>
 #include <unwindstack/Memory.h>
 
-#include "Check.h"
 #include "DwarfEhFrameWithHdr.h"
 #include "DwarfEncoding.h"
 

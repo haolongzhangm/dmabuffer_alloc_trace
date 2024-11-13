@@ -18,8 +18,6 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#include <string>
-
 #define LOG_TAG "unwind"
 #include <android-base/log_main.h>
 

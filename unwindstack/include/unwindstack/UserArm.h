@@ -29,6 +29,7 @@
 #ifndef _LIBUNWINDSTACK_USER_ARM_H
 #define _LIBUNWINDSTACK_USER_ARM_H
 
+#include <cstdint>
 namespace unwindstack {
 
 struct arm_user_regs {

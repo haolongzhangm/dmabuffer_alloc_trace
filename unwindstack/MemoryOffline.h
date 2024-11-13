@@ -36,6 +36,8 @@ class MemoryOffline : public Memory {
 
   bool Init(const std::string& file, uint64_t offset);
 
+  bool Init(const std::string& file, uint64_t offset, uint64_t start, uint64_t size);
+
   size_t Read(uint64_t addr, void* dst, size_t size) override;
 
  private:

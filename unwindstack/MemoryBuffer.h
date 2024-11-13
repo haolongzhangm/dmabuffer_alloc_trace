@@ -18,10 +18,6 @@
 #define _LIBUNWINDSTACK_MEMORY_BUFFER_H
 
 #include <stdint.h>
-
-#include <string>
-#include <vector>
-
 #include <unwindstack/Memory.h>
 
 namespace unwindstack {

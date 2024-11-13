@@ -15,10 +15,8 @@
  */
 
 #include <pthread.h>
-#include <stdint.h>
 #include <string.h>
 #include <sys/types.h>
-#include <time.h>
 #include <ucontext.h>
 
 #include <chrono>

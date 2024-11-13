@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The Android Open Source Project
+ * Copyright (C) 2020 The Android Open Source Project
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -25,22 +25,21 @@
  * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+#pragma once
 
-#ifndef _LIBUNWINDSTACK_USER_MIPS_H
-#define _LIBUNWINDSTACK_USER_MIPS_H
-
-#include <cstdint>
-namespace unwindstack {
-
-enum Mips32UserReg : uint16_t {
-  MIPS32_EF_R0 = 6,
-  MIPS32_EF_CP0_EPC = 40,
-};
-
-struct mips_user_regs {
-  uint32_t regs[45];
-};
-
-}  // namespace unwindstack
-
-#endif  // _LIBUNWINDSTACK_USER_MIPS_H
+#include <stddef.h>
+#include <sys/auxv.h>
+#include <sys/mman.h>
+#include <sys/prctl.h>
+// Note: Most PR_MTE_* constants come from the upstream kernel. This tag mask
+// allows for the hardware to provision any nonzero tag. Zero tags are reserved
+// for scudo to use for the chunk headers in order to prevent linear heap
+// overflow/underflow.
+inline bool mte_supported() {
+#if defined(__aarch64__)
+  static bool supported = getauxval(AT_HWCAP2) & HWCAP2_MTE;
+#else
+  static bool supported = false;
+#endif
+  return supported;
+}

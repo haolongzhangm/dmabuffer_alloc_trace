@@ -26,7 +26,6 @@
 
 #include <unwindstack/DwarfError.h>
 
-#include "DwarfEncoding.h"
 #include "RegsInfo.h"
 
 namespace unwindstack {

@@ -16,8 +16,6 @@
 
 #include <stdint.h>
 
-#include <string>
-
 #include <unwindstack/DwarfMemory.h>
 #include <unwindstack/Memory.h>
 

@@ -66,7 +66,6 @@
 #include <memory>
 #include <ostream>
 
-#include "android-base/errno_restorer.h"
 #include "android-base/macros.h"
 
 // Note: DO NOT USE DIRECTLY. Use LOG_TAG instead.

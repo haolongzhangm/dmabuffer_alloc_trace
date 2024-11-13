@@ -19,8 +19,6 @@
 
 #include <stdint.h>
 
-#include <vector>
-
 #include <unwindstack/DwarfSection.h>
 
 namespace unwindstack {

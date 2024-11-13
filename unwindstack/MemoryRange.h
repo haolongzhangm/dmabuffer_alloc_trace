@@ -21,7 +21,6 @@
 
 #include <map>
 #include <memory>
-#include <string>
 
 #include <unwindstack/Memory.h>
 
