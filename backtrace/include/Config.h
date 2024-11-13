@@ -7,7 +7,7 @@ constexpr uint64_t ZYGOTE_CHILD = 0x0; // zygote 创建的子进程：true-> 0x1
 constexpr uint64_t BACKTRACE = 0x2; // 记录堆栈
 constexpr uint64_t TRACK_ALLOCS = 0x4; // 记录内存申请动作
 constexpr uint64_t BACKTRACE_SPECIFIC_SIZES = 0x8; // 记录特定大小的内存申请
-constexpr uint64_t RECORD_MEMORY_PEAK = 0x16; // 记录内存峰值
+constexpr uint64_t RECORD_MEMORY_PEAK = 0x80; // 记录内存峰值
 
 class Config {
 public:
