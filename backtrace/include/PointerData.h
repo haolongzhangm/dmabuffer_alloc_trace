@@ -53,6 +53,7 @@ struct FrameInfoType {
 struct PointerInfoType {
   size_t size;
   size_t hash_index;
+  time_t alloc_time;
   size_t RealSize() const { return size & ~(1U << 31); }
   // Zygote 是一个非常重要的进程，它是系统启动时创建的第一个用户进程。
   // Zygote 的主要功能是预加载类和资源，然后通过 fork() 创建其他应用程序进程
@@ -70,6 +71,7 @@ struct ListInfoType {
   uintptr_t pointer;
   size_t num_allocations;
   size_t size;
+  time_t alloc_time;
   bool zygote_child_alloc;
   FrameInfoType* frame_info;
   std::vector<unwindstack::FrameData> backtrace_info;

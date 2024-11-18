@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdio>
+#include <ctime>
 #include <mutex>
 #include <cxxabi.h>
 #include <inttypes.h>
@@ -65,7 +66,7 @@ void PointerData::Add(uintptr_t ptr, size_t pointer_size) {
   std::lock_guard<std::mutex> pointer_guard(pointer_mutex_);
   uintptr_t mangled_ptr = ManglePointer(ptr);
   pointers_[mangled_ptr] =
-      PointerInfoType{PointerInfoType::GetEncodedSize(pointer_size), hash_index};
+      PointerInfoType{PointerInfoType::GetEncodedSize(pointer_size), hash_index, time(NULL)};
   current_used += pointer_size;
 
   if (peak_tot < current_used) {
@@ -216,7 +217,7 @@ void PointerData::GetList(std::vector<ListInfoType>* list, bool only_with_backtr
         }
       }
 
-      list->emplace_back(ListInfoType{pointer, 1, entry.second.RealSize(),
+      list->emplace_back(ListInfoType{pointer, 1, entry.second.RealSize(), entry.second.alloc_time, 
                                 entry.second.ZygoteChildAlloc(), frame_info, std::move(backtrace_info)});
     }
 
@@ -294,7 +295,12 @@ void PointerData::DumpLiveToFile(int fd) {
   dprintf(fd, "host peak used: %zuMB, dma peak used %zuMB, total peak used: %zuMB\n", peak_host / 1024 / 1024, peak_dma / 1024 / 1024, peak_tot / 1024 / 1024);
   dprintf(fd, "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n\n");
   for (const auto& info : list) {
-    dprintf(fd, "alloc_size:%zuKB \t alloc_num:%zu\n", info.size / 1024, info.num_allocations);
+    // 解析时间
+    struct tm *local_time = localtime(&info.alloc_time);
+    char formatted_time[20];
+    strftime(formatted_time, sizeof(formatted_time), "%Y-%m-%d %H:%M:%S", local_time);
+
+    dprintf(fd, "alloc_size:%zuKB \t alloc_num:%zu \t alloc_time:%s\n", info.size / 1024, info.num_allocations, formatted_time);
     for (size_t i = 0; i < info.backtrace_info.size(); ++i) {
       const unwindstack::FrameData* frame = &info.backtrace_info[i];
       auto map_info = frame->map_info;
