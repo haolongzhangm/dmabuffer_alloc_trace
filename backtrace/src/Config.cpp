@@ -30,8 +30,8 @@ bool Config::Init() {
     // 记录峰值
     options_ |= RECORD_MEMORY_PEAK;
     // 峰值大于该值才记录 trace
-    backtrace_dump_peak_val_ = 700 * 1024 * 1024;
-    backtrace_dump_peak_increment_ = 0;
+    backtrace_dump_peak_val_ = 370 * 1024 * 1024;
+    backtrace_dump_peak_increment_ = 1024;
 
     return true;
 }

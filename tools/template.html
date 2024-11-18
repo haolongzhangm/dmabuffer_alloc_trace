@@ -231,8 +231,9 @@ document.addEventListener('DOMContentLoaded', function() {
         const mouseY = event.clientY + window.scrollY;
         const tooltipX = mouseX;
         const tooltipY = mouseY;
-        const tooltipContent = "<strong>Size:</strong> " + 
-                (d.size / 1024).toFixed(1) + "KB" + "<br><strong>Duration:</strong> " + (d.freeTime - d.mallocTime) / 1000 + "ms";
+        const tooltipContent = "<strong>Size:</strong> " + (d.size).toFixed(1) + "KB" 
+                                + "<br><strong>AllocNum:</strong> " + d.allocNum
+                                + "<br><strong>Duration:</strong> " + (d.freeTime - d.mallocTime) / 1000 + "ms";
         tooltip.style("left", tooltipX + "px")
                .style("top", tooltipY + "px")
                .style("display", "block")
@@ -320,10 +321,11 @@ document.addEventListener('DOMContentLoaded', function() {
     lines.forEach((line, index) => {
         const trimmedLine = line.trim();
 
-        if (trimmedLine.startsWith("malloc")) {
-            const size = trimmedLine.match(/^malloc size:\s*(\d+)$/)[1];
+        if (trimmedLine.startsWith("alloc")) {
+            var matches = trimmedLine.match(/(?<=:)\d+/g);
             traceData.push({
-                size,
+                size: parseInt(matches[0]),       // Convert to integer
+                allocNum: parseInt(matches[1]),   // Convert to integer
                 mallocTime: 0,
                 freeTime: 30000,
                 fill: traceData.length % 2 === 0 ? "#6DC8F1" : "lightgreen",

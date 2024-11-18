@@ -115,7 +115,6 @@ private:
   std::unordered_map<size_t, std::vector<unwindstack::FrameData>> backtraces_info_;
   size_t cur_hash_index_;
 
-  bool peak_needs_update;
   size_t current_used, current_host, current_dma;
   size_t peak_tot, peak_host, peak_dma;
   std::vector<ListInfoType> list;

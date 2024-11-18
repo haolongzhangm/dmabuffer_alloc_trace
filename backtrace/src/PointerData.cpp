@@ -35,7 +35,6 @@ bool PointerData::Initialize(const Config& config) {
   cur_hash_index_ = kBacktraceEmptyIndex + 1;
   current_used = current_host = current_dma = 0;
   peak_tot = peak_host = peak_dma = 0;
-  peak_needs_update = false;
 
   if (config.backtrace_sampling()) {
     // 设置信号处理函数
@@ -71,8 +70,13 @@ void PointerData::Add(uintptr_t ptr, size_t pointer_size) {
 
   if (peak_tot < current_used) {
     peak_tot = current_used;
-    if (peak_tot > g_debug->config().backtrace_dump_peak_val()) {
-      peak_needs_update = true;
+    size_t dump_peak_increment = g_debug->config().backtrace_dump_peak_increment();
+    size_t dump_peak_val = g_debug->config().backtrace_dump_peak_val();
+    bool dump_peak = (g_debug->config().options() & RECORD_MEMORY_PEAK);
+    if (dump_peak && peak_tot > dump_peak_val && pointer_size > dump_peak_increment) {
+        std::lock_guard<std::mutex> frame_guard(frame_mutex_);
+        list.clear();
+        GetUniqueList(&list, false);
     }
   }
 }
@@ -107,16 +111,6 @@ void PointerData::Remove(uintptr_t ptr, bool is_dma) {
     }
 
     current_used -= entry->second.size;
-    if (peak_needs_update) {
-      size_t dump_peak_increment = g_debug->config().backtrace_dump_peak_increment();
-      if ((g_debug->config().options() & RECORD_MEMORY_PEAK) && entry->second.size > dump_peak_increment) {
-        std::lock_guard<std::mutex> frame_guard(frame_mutex_);
-        list.clear();
-        GetUniqueList(&list, false);
-      }
-      peak_needs_update = false;
-    }
-
     size_t* target = is_dma ? &current_dma : &current_host;
     *target -= entry->second.size;
     hash_index = entry->second.hash_index;
@@ -290,15 +284,17 @@ void PointerData::DumpLiveToFile(int fd) {
   std::lock_guard<std::mutex> pointer_guard(pointer_mutex_);
   std::lock_guard<std::mutex> frame_guard(frame_mutex_);
   printf("\n+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
-  printf("host peak used: %zuMB, dma peak used %zuMB, peak used: %zuMB\n\n", peak_host / 1024 / 1024, peak_dma / 1024 / 1024, peak_tot / 1024 / 1024);
+  printf("host peak used: %zuMB, dma peak used %zuMB, total peak used: %zuMB\n\n", peak_host / 1024 / 1024, peak_dma / 1024 / 1024, peak_tot / 1024 / 1024);
   // 如果不打印峰值，进程结束时仍未释放的内存
   if (!(g_debug->config().options() & RECORD_MEMORY_PEAK)) {
     list.clear();
     GetUniqueList(&list, false);
   }
 
+  dprintf(fd, "host peak used: %zuMB, dma peak used %zuMB, total peak used: %zuMB\n", peak_host / 1024 / 1024, peak_dma / 1024 / 1024, peak_tot / 1024 / 1024);
+  dprintf(fd, "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n\n");
   for (const auto& info : list) {
-    dprintf(fd, "malloc size:%zu alloc times:%zu\n", info.size, info.num_allocations);
+    dprintf(fd, "alloc_size:%zuKB \t alloc_num:%zu\n", info.size / 1024, info.num_allocations);
     for (size_t i = 0; i < info.backtrace_info.size(); ++i) {
       const unwindstack::FrameData* frame = &info.backtrace_info[i];
       auto map_info = frame->map_info;
