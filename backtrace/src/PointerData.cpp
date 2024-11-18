@@ -1,7 +1,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdio>
-#include <ctime>
+#include <sys/time.h>
 #include <mutex>
 #include <cxxabi.h>
 #include <inttypes.h>
@@ -31,6 +31,9 @@ bool PointerData::Initialize(const Config& config) {
   pointers_.clear();
   key_to_index_.clear();
   frames_.clear();
+  backtraces_info_.clear();
+  peak_info.clear();
+  list.clear();
   // A hash index of kBacktraceEmptyIndex indicates that we tried to get
   // a backtrace, but there was nothing recorded.
   cur_hash_index_ = kBacktraceEmptyIndex + 1;
@@ -65,8 +68,10 @@ void PointerData::Add(uintptr_t ptr, size_t pointer_size) {
 
   std::lock_guard<std::mutex> pointer_guard(pointer_mutex_);
   uintptr_t mangled_ptr = ManglePointer(ptr);
+  struct timeval tv;
+  gettimeofday(&tv, NULL);
   pointers_[mangled_ptr] =
-      PointerInfoType{PointerInfoType::GetEncodedSize(pointer_size), hash_index, time(NULL)};
+      PointerInfoType{PointerInfoType::GetEncodedSize(pointer_size), hash_index, tv};
   current_used += pointer_size;
 
   if (peak_tot < current_used) {
@@ -76,8 +81,7 @@ void PointerData::Add(uintptr_t ptr, size_t pointer_size) {
     bool dump_peak = (g_debug->config().options() & RECORD_MEMORY_PEAK);
     if (dump_peak && peak_tot > dump_peak_val && pointer_size > dump_peak_increment) {
         std::lock_guard<std::mutex> frame_guard(frame_mutex_);
-        list.clear();
-        GetUniqueList(&list, false);
+        GetUniqueList(&list, &peak_info, true);
     }
   }
 }
@@ -187,8 +191,11 @@ size_t PointerData::AddBacktrace(size_t num_frames, size_t size_bytes) {
 }
 
 
-void PointerData::GetList(std::vector<ListInfoType>* list, bool only_with_backtrace) {
+void PointerData::GetList(std::vector<ListInfoType>* list, std::set<timeval>* info, bool only_with_backtrace) {
   for (const auto& entry : pointers_) {
+    if (info->count(entry.second.alloc_time)) {
+      continue;
+    }
     FrameInfoType* frame_info = nullptr;
     std::vector<unwindstack::FrameData> backtrace_info;
     uintptr_t pointer = DemanglePointer(entry.first);
@@ -216,14 +223,16 @@ void PointerData::GetList(std::vector<ListInfoType>* list, bool only_with_backtr
           std::copy(backtrace_entry->second.begin(), backtrace_entry->second.end(), backtrace_info.begin());
         }
       }
-
-      list->emplace_back(ListInfoType{pointer, 1, entry.second.RealSize(), entry.second.alloc_time, 
-                                entry.second.ZygoteChildAlloc(), frame_info, std::move(backtrace_info)});
     }
 
-    if (hash_index == 0 && only_with_backtrace) {
+    // 舍弃没有堆栈的 pointer
+    if (hash_index <= 1 && only_with_backtrace) {
       continue;
     }
+
+    peak_info.emplace(entry.second.alloc_time);
+    list->emplace_back(ListInfoType{pointer, 1, entry.second.RealSize(), entry.second.alloc_time, 
+    entry.second.ZygoteChildAlloc(), frame_info, std::move(backtrace_info)});
   }
 
   // Sort by the size of the allocation.
@@ -257,13 +266,13 @@ void PointerData::GetList(std::vector<ListInfoType>* list, bool only_with_backtr
       return a_frame->frames.size() > b_frame->frames.size();
     }
 
-    // Last sort by pointer.
-    return a.pointer < b.pointer;
+    // Last sort by alloc time.
+    return a.alloc_time < b.alloc_time;
   });
 }
 
-void PointerData::GetUniqueList(std::vector<ListInfoType>* list, bool only_with_backtrace) {
-  GetList(list, only_with_backtrace);
+void PointerData::GetUniqueList(std::vector<ListInfoType>* list, std::set<timeval>* info, bool only_with_backtrace) {
+  GetList(list, info, only_with_backtrace);
 
   // Remove duplicates of size/backtraces.
   for (auto iter = list->begin(); iter != list->end();) {
@@ -288,15 +297,14 @@ void PointerData::DumpLiveToFile(int fd) {
   printf("host peak used: %zuMB, dma peak used %zuMB, total peak used: %zuMB\n\n", peak_host / 1024 / 1024, peak_dma / 1024 / 1024, peak_tot / 1024 / 1024);
   // 如果不打印峰值，进程结束时仍未释放的内存
   if (!(g_debug->config().options() & RECORD_MEMORY_PEAK)) {
-    list.clear();
-    GetUniqueList(&list, false);
+    GetUniqueList(&list, &peak_info, true);
   }
 
   dprintf(fd, "host peak used: %zuMB, dma peak used %zuMB, total peak used: %zuMB\n", peak_host / 1024 / 1024, peak_dma / 1024 / 1024, peak_tot / 1024 / 1024);
   dprintf(fd, "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n\n");
   for (const auto& info : list) {
     // 解析时间
-    struct tm *local_time = localtime(&info.alloc_time);
+    struct tm *local_time = localtime(&info.alloc_time.tv_sec);
     char formatted_time[20];
     strftime(formatted_time, sizeof(formatted_time), "%Y-%m-%d %H:%M:%S", local_time);
 

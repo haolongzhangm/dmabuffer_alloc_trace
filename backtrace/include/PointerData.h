@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <vector>
+#include <set>
 #include <unordered_map>
 #include <mutex>
 
@@ -50,10 +51,18 @@ struct FrameInfoType {
   std::vector<uintptr_t> frames;
 };
 
+// 新增 timeval 比较函数
+inline bool operator<(const timeval& lhs, const timeval& rhs) {
+    // Convert both times to microseconds and compare directly
+    long long l_time = static_cast<long long>(lhs.tv_sec) * 1000000 + lhs.tv_usec;
+    long long r_time = static_cast<long long>(rhs.tv_sec) * 1000000 + rhs.tv_usec;
+    return l_time < r_time;
+}
+
 struct PointerInfoType {
   size_t size;
   size_t hash_index;
-  time_t alloc_time;
+  timeval alloc_time;
   size_t RealSize() const { return size & ~(1U << 31); }
   // Zygote 是一个非常重要的进程，它是系统启动时创建的第一个用户进程。
   // Zygote 的主要功能是预加载类和资源，然后通过 fork() 创建其他应用程序进程
@@ -71,7 +80,7 @@ struct ListInfoType {
   uintptr_t pointer;
   size_t num_allocations;
   size_t size;
-  time_t alloc_time;
+  timeval alloc_time;
   bool zygote_child_alloc;
   FrameInfoType* frame_info;
   std::vector<unwindstack::FrameData> backtrace_info;
@@ -103,8 +112,8 @@ private:
   inline uintptr_t ManglePointer(uintptr_t pointer) { return pointer ^ UINTPTR_MAX; }
   inline uintptr_t DemanglePointer(uintptr_t pointer) { return pointer ^ UINTPTR_MAX; }
 
-  void GetList(std::vector<ListInfoType>* list, bool only_with_backtrace);
-  void GetUniqueList(std::vector<ListInfoType>* list, bool only_with_backtrace);
+  void GetList(std::vector<ListInfoType>* list, std::set<timeval>* info, bool only_with_backtrace);
+  void GetUniqueList(std::vector<ListInfoType>* list, std::set<timeval>* info, bool only_with_backtrace);
 
   static std::atomic_uint8_t backtrace_enabled_;
 
@@ -119,6 +128,7 @@ private:
 
   size_t current_used, current_host, current_dma;
   size_t peak_tot, peak_host, peak_dma;
+  std::set<timeval> peak_info;
   std::vector<ListInfoType> list;
 
   BIONIC_DISALLOW_COPY_AND_ASSIGN(PointerData);
