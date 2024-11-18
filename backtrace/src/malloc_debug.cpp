@@ -1,3 +1,4 @@
+#include <cstdio>
 #include <cstdlib>
 #include <dlfcn.h>
 #include <fcntl.h>
@@ -68,6 +69,8 @@ bool debug_initialize(void* init_space[]) {
     RESOLVE(posix_memalign);
     RESOLVE(ioctl);
     RESOLVE(close);
+    RESOLVE(mmap);
+    RESOLVE(munmap);
 #undef RESOLVE
 
     if (!DebugDisableInitialize()) {
@@ -290,4 +293,35 @@ int debug_close(int fd) {
   }
 
   return m_sys_close(fd);
+}
+
+void* debug_mmap(void* addr, size_t size, int prot, int flags, int fd, off_t offset) {
+  if (DebugCallsDisabled() || addr != nullptr || fd >= 0) {
+    return m_sys_mmap(addr, size, prot, flags, fd, offset);
+  }
+
+  ScopedConcurrentLock lock;
+  ScopedDisableDebugCalls disable;
+
+  void* result = m_sys_mmap(addr, size, prot, flags, fd, offset);
+  if (g_debug->TrackPointers()) {
+    g_debug->pointer->AddHost(result, size);
+  }
+
+  return result;
+}
+
+int debug_munmap(void* addr, size_t size) {
+  if (DebugCallsDisabled()) {
+    return m_sys_munmap(addr, size);
+  }
+
+  ScopedConcurrentLock lock;
+  ScopedDisableDebugCalls disable;
+
+  if (g_debug->TrackPointers()) {
+    g_debug->pointer->RemoveHost(addr);
+  }
+
+  return m_sys_munmap(addr, size);
 }

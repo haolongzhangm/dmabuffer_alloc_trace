@@ -7,6 +7,8 @@ global:
     calloc;
     realloc;
     posix_memalign;
+    mmap;
+    munmap;
 
 local: *;
 };

@@ -298,7 +298,7 @@ void PointerData::DumpLiveToFile(int fd) {
   }
 
   for (const auto& info : list) {
-    dprintf(fd, "malloc size: %zu\n", info.size);
+    dprintf(fd, "malloc size:%zu alloc times:%zu\n", info.size, info.num_allocations);
     for (size_t i = 0; i < info.backtrace_info.size(); ++i) {
       const unwindstack::FrameData* frame = &info.backtrace_info[i];
       auto map_info = frame->map_info;

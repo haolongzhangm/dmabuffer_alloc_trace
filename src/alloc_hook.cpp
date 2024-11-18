@@ -1,11 +1,14 @@
 #include <dlfcn.h>
-#include <pthread.h>
-#include <cstddef>
-#include <type_traits>
+#include <sys/syscall.h>
 
 #include "DebugData.h"
 #include "PointerData.h"
 #include "malloc_debug.h"
+
+static bool before_main = true;
+void __attribute__((constructor(111))) check(void) {
+    before_main = false;
+}
 
 class AllocHook {
 public:
@@ -22,6 +25,8 @@ public:
     int posix_memalign(void** ptr, size_t alignment, size_t size) { return debug_posix_memalign(ptr, alignment, size); }
     int ioctl(int fd, int request, void* arg) { return debug_ioctl(fd, request, arg); }
     int close(int fd) { return debug_close(fd); }
+    void* mmap(void* addr, size_t size, int prot, int flags, int fd, off_t offset) { return debug_mmap(addr, size, prot, flags, fd, offset); }
+    int munmap(void* addr, size_t size) { return debug_munmap(addr, size); }
 
     static AllocHook& inst();
 
@@ -38,6 +43,7 @@ AllocHook& AllocHook::inst() {
 }
 
 extern "C" {
+
 void* malloc(size_t size) {
     return AllocHook::inst().malloc(size);
 }
@@ -69,6 +75,18 @@ int ioctl(int fd, int request, ...) {
 
 int close(int fd) {
     return AllocHook::inst().close(fd);
+}
+
+void* mmap(void* addr, size_t size, int prot, int flags, int fd, off_t offset) {
+    // 程序初始化、类实例化时，会调用 mmap
+    if (before_main) {
+        return (void*)syscall(SYS_mmap, addr, size, prot, flags, fd, offset);
+    }
+    return AllocHook::inst().mmap(addr, size, prot, flags, fd, offset);
+}
+
+int munmap(void* addr, size_t size) {
+    return AllocHook::inst().munmap(addr, size);
 }
 
 }
