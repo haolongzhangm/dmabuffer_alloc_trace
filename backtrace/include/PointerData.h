@@ -16,6 +16,8 @@
 
 #include "Config.h"
 
+enum MemType{ HOST, MMAP, DMA };
+
 struct FrameKeyType {
   size_t num_frames;
   uintptr_t* frames;
@@ -63,6 +65,7 @@ struct PointerInfoType {
   size_t size;
   size_t hash_index;
   timeval alloc_time;
+  MemType mem_type;
   size_t RealSize() const { return size & ~(1U << 31); }
   // Zygote 是一个非常重要的进程，它是系统启动时创建的第一个用户进程。
   // Zygote 的主要功能是预加载类和资源，然后通过 fork() 创建其他应用程序进程
@@ -81,6 +84,7 @@ struct ListInfoType {
   size_t num_allocations;
   size_t size;
   timeval alloc_time;
+  MemType mem_type;
   bool zygote_child_alloc;
   FrameInfoType* frame_info;
   std::vector<unwindstack::FrameData> backtrace_info;
@@ -99,9 +103,9 @@ public:
   size_t AddBacktrace(size_t num_frames, size_t size_bytes);
   void RemoveBacktrace(size_t hash_index);
 
-  void Add(uintptr_t pointer, size_t size);
-  void AddHost(const void* ptr, size_t pointer_size);
-  void AddDMA(const uint32_t ptr, size_t pointer_size);
+  void Add(uintptr_t pointer, size_t size, MemType type);
+  void AddHost(const void* ptr, size_t pointer_size, MemType type = HOST);
+  void AddDMA(const uint32_t ptr, size_t pointer_size, MemType type = DMA);
   void Remove(uintptr_t pointer, bool is_dma);
   void RemoveHost(const void* ptr);
   void RemoveDMA(const uint32_t ptr);

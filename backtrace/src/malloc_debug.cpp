@@ -10,6 +10,7 @@
 
 #include "Config.h"
 #include "DebugData.h"
+#include "PointerData.h"
 #include "debug_disable.h"
 #include "malloc_debug.h"
 
@@ -305,7 +306,7 @@ void* debug_mmap(void* addr, size_t size, int prot, int flags, int fd, off_t off
 
   void* result = m_sys_mmap(addr, size, prot, flags, fd, offset);
   if (g_debug->TrackPointers()) {
-    g_debug->pointer->AddHost(result, size);
+    g_debug->pointer->AddHost(result, size, MMAP);
   }
 
   return result;

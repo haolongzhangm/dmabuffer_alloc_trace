@@ -15,6 +15,7 @@
 
 std::atomic_uint8_t PointerData::backtrace_enabled_ = true;
 constexpr size_t kBacktraceEmptyIndex = 1;
+const char* mtype[3] = {"host", "mmap", "dma"};
 
 static inline bool ShouldBacktraceAllocSize(size_t size_bytes) {
   static bool only_backtrace_specific_sizes = g_debug->config().options() & BACKTRACE_SPECIFIC_SIZES;
@@ -60,7 +61,7 @@ bool PointerData::Initialize(const Config& config) {
   return true;
 }
 
-void PointerData::Add(uintptr_t ptr, size_t pointer_size) {
+void PointerData::Add(uintptr_t ptr, size_t pointer_size, MemType type) {
   size_t hash_index = 0;
   if (backtrace_enabled_) {
     hash_index = AddBacktrace(g_debug->config().backtrace_frames(), pointer_size);
@@ -71,7 +72,7 @@ void PointerData::Add(uintptr_t ptr, size_t pointer_size) {
   struct timeval tv;
   gettimeofday(&tv, NULL);
   pointers_[mangled_ptr] =
-      PointerInfoType{PointerInfoType::GetEncodedSize(pointer_size), hash_index, tv};
+      PointerInfoType{PointerInfoType::GetEncodedSize(pointer_size), hash_index, tv, type};
   current_used += pointer_size;
 
   if (peak_tot < current_used) {
@@ -86,8 +87,8 @@ void PointerData::Add(uintptr_t ptr, size_t pointer_size) {
   }
 }
 
-void PointerData::AddHost(const void* ptr, size_t pointer_size) {
-  Add(reinterpret_cast<uintptr_t>(ptr), pointer_size);
+void PointerData::AddHost(const void* ptr, size_t pointer_size, MemType type) {
+  Add(reinterpret_cast<uintptr_t>(ptr), pointer_size, type);
   std::lock_guard<std::mutex> pointer_guard(pointer_mutex_);
   current_host += pointer_size;
   if (current_host > peak_host) {
@@ -95,8 +96,8 @@ void PointerData::AddHost(const void* ptr, size_t pointer_size) {
   }
 }
 
-void PointerData::AddDMA(const uint32_t ptr, size_t pointer_size) {
-  Add(static_cast<uintptr_t>(ptr), pointer_size);
+void PointerData::AddDMA(const uint32_t ptr, size_t pointer_size, MemType type) {
+  Add(static_cast<uintptr_t>(ptr), pointer_size, type);
   std::lock_guard<std::mutex> pointer_guard(pointer_mutex_);
   current_dma += pointer_size;
   if (current_dma > peak_dma) {
@@ -232,11 +233,12 @@ void PointerData::GetList(std::vector<ListInfoType>* list, std::set<timeval>* in
 
     peak_info.emplace(entry.second.alloc_time);
     list->emplace_back(ListInfoType{pointer, 1, entry.second.RealSize(), entry.second.alloc_time, 
-    entry.second.ZygoteChildAlloc(), frame_info, std::move(backtrace_info)});
+            entry.second.mem_type, entry.second.ZygoteChildAlloc(), frame_info, std::move(backtrace_info)});
   }
 
+  bool dump_peak = g_debug->config().options() & RECORD_MEMORY_PEAK;
   // Sort by the size of the allocation.
-  std::sort(list->begin(), list->end(), [](const ListInfoType& a, const ListInfoType& b) {
+  std::sort(list->begin(), list->end(), [&](const ListInfoType& a, const ListInfoType& b) {
     // Put zygote child allocations first.
     bool a_zygote_child_alloc = a.zygote_child_alloc;
     bool b_zygote_child_alloc = b.zygote_child_alloc;
@@ -246,6 +248,9 @@ void PointerData::GetList(std::vector<ListInfoType>* list, std::set<timeval>* in
     if (!a_zygote_child_alloc && b_zygote_child_alloc) {
       return true;
     }
+
+    // Sort by time, case: not dump peak.
+    if (!dump_peak) return a.alloc_time < b.alloc_time;
 
     // Sort by size, descending order.
     if (a.size != b.size) return a.size > b.size;
@@ -297,7 +302,7 @@ void PointerData::DumpLiveToFile(int fd) {
   printf("host peak used: %zuMB, dma peak used %zuMB, total peak used: %zuMB\n\n", peak_host / 1024 / 1024, peak_dma / 1024 / 1024, peak_tot / 1024 / 1024);
   // 如果不打印峰值，进程结束时仍未释放的内存
   if (!(g_debug->config().options() & RECORD_MEMORY_PEAK)) {
-    GetUniqueList(&list, &peak_info, true);
+    GetList(&list, &peak_info, true);
   }
 
   dprintf(fd, "host peak used: %zuMB, dma peak used %zuMB, total peak used: %zuMB\n", peak_host / 1024 / 1024, peak_dma / 1024 / 1024, peak_tot / 1024 / 1024);
@@ -308,7 +313,8 @@ void PointerData::DumpLiveToFile(int fd) {
     char formatted_time[20];
     strftime(formatted_time, sizeof(formatted_time), "%Y-%m-%d %H:%M:%S", local_time);
 
-    dprintf(fd, "alloc_size:%zuKB \t alloc_num:%zu \t alloc_time:%s\n", info.size / 1024, info.num_allocations, formatted_time);
+    dprintf(fd, "alloc_size:%zuKB \t alloc_type:%s \t alloc_num:%zu \t alloc_time:%s.%zu\n", info.size / 1024, mtype[info.mem_type],
+                                                                                      info.num_allocations, formatted_time, info.alloc_time.tv_usec / 1000);
     for (size_t i = 0; i < info.backtrace_info.size(); ++i) {
       const unwindstack::FrameData* frame = &info.backtrace_info[i];
       auto map_info = frame->map_info;
