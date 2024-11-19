@@ -34,7 +34,7 @@ bool PointerData::Initialize(const Config& config) {
   frames_.clear();
   backtraces_info_.clear();
   peak_info.clear();
-  list.clear();
+  peak_list.clear();
   // A hash index of kBacktraceEmptyIndex indicates that we tried to get
   // a backtrace, but there was nothing recorded.
   cur_hash_index_ = kBacktraceEmptyIndex + 1;
@@ -82,7 +82,7 @@ void PointerData::Add(uintptr_t ptr, size_t pointer_size, MemType type) {
     bool dump_peak = (g_debug->config().options() & RECORD_MEMORY_PEAK);
     if (dump_peak && peak_tot > dump_peak_val && pointer_size > dump_peak_increment) {
         std::lock_guard<std::mutex> frame_guard(frame_mutex_);
-        GetUniqueList(&list, &peak_info, true);
+        GetUniqueList(&peak_list, &peak_info, true);
     }
   }
 }
@@ -231,7 +231,7 @@ void PointerData::GetList(std::vector<ListInfoType>* list, std::set<timeval>* in
       continue;
     }
 
-    peak_info.emplace(entry.second.alloc_time);
+    info->emplace(entry.second.alloc_time);
     list->emplace_back(ListInfoType{pointer, 1, entry.second.RealSize(), entry.second.alloc_time, 
             entry.second.mem_type, entry.second.ZygoteChildAlloc(), frame_info, std::move(backtrace_info)});
   }
@@ -300,9 +300,13 @@ void PointerData::DumpLiveToFile(int fd) {
   std::lock_guard<std::mutex> frame_guard(frame_mutex_);
   printf("\n+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
   printf("host peak used: %zuMB, dma peak used %zuMB, total peak used: %zuMB\n\n", peak_host / 1024 / 1024, peak_dma / 1024 / 1024, peak_tot / 1024 / 1024);
-  // 如果不打印峰值，进程结束时仍未释放的内存
+  
+  std::vector<ListInfoType> list;
   if (!(g_debug->config().options() & RECORD_MEMORY_PEAK)) {
-    GetList(&list, &peak_info, true);
+    std::set<timeval> dump_info;
+    GetList(&list, &dump_info, true);
+  } else {
+    list = std::move(peak_list);
   }
 
   dprintf(fd, "host peak used: %zuMB, dma peak used %zuMB, total peak used: %zuMB\n", peak_host / 1024 / 1024, peak_dma / 1024 / 1024, peak_tot / 1024 / 1024);

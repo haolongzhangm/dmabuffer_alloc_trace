@@ -28,6 +28,8 @@ public:
     void* mmap(void* addr, size_t size, int prot, int flags, int fd, off_t offset) { return debug_mmap(addr, size, prot, flags, fd, offset); }
     int munmap(void* addr, size_t size) { return debug_munmap(addr, size); }
 
+    void checkpoint(const char* file_name) { return debug_dump_heap(file_name); }
+
     static AllocHook& inst();
 
 private:
@@ -87,6 +89,10 @@ void* mmap(void* addr, size_t size, int prot, int flags, int fd, off_t offset) {
 
 int munmap(void* addr, size_t size) {
     return AllocHook::inst().munmap(addr, size);
+}
+
+void checkpoint(const char* file_name) {
+    AllocHook::inst().checkpoint(file_name);
 }
 
 }

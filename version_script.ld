@@ -9,6 +9,7 @@ global:
     posix_memalign;
     mmap;
     munmap;
+    checkpoint;
 
 local: *;
 };

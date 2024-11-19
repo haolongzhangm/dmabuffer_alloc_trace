@@ -133,7 +133,7 @@ private:
   size_t current_used, current_host, current_dma;
   size_t peak_tot, peak_host, peak_dma;
   std::set<timeval> peak_info;
-  std::vector<ListInfoType> list;
+  std::vector<ListInfoType> peak_list;
 
   BIONIC_DISALLOW_COPY_AND_ASSIGN(PointerData);
 };
