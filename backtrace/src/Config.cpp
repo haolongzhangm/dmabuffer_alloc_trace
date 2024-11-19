@@ -1,7 +1,9 @@
 #include <cassert>
 #include <cstdio>
+#include <reserved_signals.h>
 
 #include "Config.h"
+
 
 static constexpr size_t DEFAULT_BACKTRACE_FRAMES = 16;
 static constexpr const char DEFAULT_BACKTRACE_DUMP_PREFIX[] = "/data/local/tmp/trace/backtrace_heap";
@@ -32,6 +34,11 @@ bool Config::Init() {
     // 峰值大于该值才记录 trace
     backtrace_dump_peak_val_ = 370 * 1024 * 1024;
     backtrace_dump_peak_increment_ = 1024;
+
+    // 通过信号插入 check point
+    options_ |= DUMP_ON_SINGAL;
+    // 用户自定义信号范围：__SIGRTMIN --- __SIGRTMAX
+    backtrace_dump_signal_ = BIONIC_SIGNAL_BACKTRACE; // BIONIC_SIGNAL_BACKTRACE: 33
 
     return true;
 }

@@ -5,6 +5,7 @@
 #include <linux/dma-heap.h>
 #include <sys/param.h> // powerof2 ---> ((((x) - 1) & (x)) == 0)
 #include <unistd.h>
+#include <signal.h>
 
 #include <android-base/stringprintf.h>
 
@@ -43,6 +44,14 @@ class ScopedConcurrentLock {
 pthread_rwlock_t ScopedConcurrentLock::lock_;
 
 DebugData* g_debug;
+
+static void singal_dump_heap(int) {
+  if ((g_debug->config().options() & BACKTRACE)) {
+    debug_dump_heap(android::base::StringPrintf("%s_time.%ld..txt",
+                                        g_debug->config().backtrace_dump_prefix(), 
+                                        time(NULL)).c_str());
+  }
+}
 
 bool debug_initialize(void* init_space[]) {
 #ifdef __OHOS__
@@ -84,8 +93,18 @@ bool debug_initialize(void* init_space[]) {
         return false;
     }
     g_debug = debug;
+    
 
     ScopedConcurrentLock::Init();
+
+    if (g_debug->config().options() & DUMP_ON_SINGAL) {
+      struct sigaction enable_act = {};
+      enable_act.sa_handler = singal_dump_heap;
+      enable_act.sa_flags = SA_RESTART | SA_ONSTACK;
+      if (sigaction(g_debug->config().backtrace_dump_signal(), &enable_act, nullptr) != 0) {
+        return false;
+      }
+    }
 
     return true;
 }
