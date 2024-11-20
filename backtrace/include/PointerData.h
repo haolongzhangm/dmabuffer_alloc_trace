@@ -111,6 +111,7 @@ public:
   void RemoveDMA(const uint32_t ptr);
 
   void DumpLiveToFile(int fd);
+  void DumpPeakInfo();
 
 private:
   inline uintptr_t ManglePointer(uintptr_t pointer) { return pointer ^ UINTPTR_MAX; }

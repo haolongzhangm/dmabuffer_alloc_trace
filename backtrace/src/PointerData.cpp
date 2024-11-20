@@ -73,7 +73,14 @@ void PointerData::Add(uintptr_t ptr, size_t pointer_size, MemType type) {
   gettimeofday(&tv, NULL);
   pointers_[mangled_ptr] =
       PointerInfoType{PointerInfoType::GetEncodedSize(pointer_size), hash_index, tv, type};
+
   current_used += pointer_size;
+  size_t* current = (type == DMA) ? &current_dma : &current_host;
+  size_t* peak = (type == DMA) ? &peak_dma : &peak_host;
+  *current += pointer_size;
+  if (*current > *peak) {
+      *peak = *current;
+  }
 
   if (peak_tot < current_used) {
     peak_tot = current_used;
@@ -89,20 +96,10 @@ void PointerData::Add(uintptr_t ptr, size_t pointer_size, MemType type) {
 
 void PointerData::AddHost(const void* ptr, size_t pointer_size, MemType type) {
   Add(reinterpret_cast<uintptr_t>(ptr), pointer_size, type);
-  std::lock_guard<std::mutex> pointer_guard(pointer_mutex_);
-  current_host += pointer_size;
-  if (current_host > peak_host) {
-    peak_host = current_host;
-  }
 }
 
 void PointerData::AddDMA(const uint32_t ptr, size_t pointer_size, MemType type) {
   Add(static_cast<uintptr_t>(ptr), pointer_size, type);
-  std::lock_guard<std::mutex> pointer_guard(pointer_mutex_);
-  current_dma += pointer_size;
-  if (current_dma > peak_dma) {
-    peak_dma = current_dma;
-  }
 }
 
 void PointerData::Remove(uintptr_t ptr, bool is_dma) {
@@ -298,8 +295,6 @@ void PointerData::GetUniqueList(std::vector<ListInfoType>* list, std::set<timeva
 void PointerData::DumpLiveToFile(int fd) {
   std::lock_guard<std::mutex> pointer_guard(pointer_mutex_);
   std::lock_guard<std::mutex> frame_guard(frame_mutex_);
-  printf("\n+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
-  printf("host peak used: %zuMB, dma peak used %zuMB, total peak used: %zuMB\n\n", peak_host / 1024 / 1024, peak_dma / 1024 / 1024, peak_tot / 1024 / 1024);
   
   std::vector<ListInfoType> list;
   if (!(g_debug->config().options() & RECORD_MEMORY_PEAK)) {
@@ -309,7 +304,8 @@ void PointerData::DumpLiveToFile(int fd) {
     list = std::move(peak_list);
   }
 
-  dprintf(fd, "host peak used: %zuMB, dma peak used %zuMB, total peak used: %zuMB\n", peak_host / 1024 / 1024, peak_dma / 1024 / 1024, peak_tot / 1024 / 1024);
+  dprintf(fd, "current host used: %zuMB, current dma used %zuMB, current total peak used: %zuMB\n", 
+                                      current_host / 1024 / 1024, current_dma / 1024 / 1024, current_used / 1024 / 1024);
   dprintf(fd, "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n\n");
   for (const auto& info : list) {
     // 解析时间
@@ -352,4 +348,10 @@ void PointerData::DumpLiveToFile(int fd) {
     }
     dprintf(fd, "\n");
   }
+}
+
+void PointerData::DumpPeakInfo() {
+  std::lock_guard<std::mutex> pointer_guard(pointer_mutex_);
+  printf("\n+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
+  printf("host peak used: %zuMB, dma peak used %zuMB, total peak used: %zuMB\n\n", peak_host / 1024 / 1024, peak_dma / 1024 / 1024, peak_tot / 1024 / 1024);
 }

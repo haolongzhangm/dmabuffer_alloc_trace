@@ -4,6 +4,7 @@
 #include <fcntl.h>
 #include <linux/dma-heap.h>
 #include <sys/param.h> // powerof2 ---> ((((x) - 1) & (x)) == 0)
+#include <sys/mman.h>
 #include <unistd.h>
 #include <signal.h>
 
@@ -124,6 +125,10 @@ void debug_finalize() {
     if ((g_debug->config().options() & BACKTRACE) && g_debug->config().backtrace_dump_on_exit()) {
         debug_dump_heap(android::base::StringPrintf("%s.exit.txt",
                                                     g_debug->config().backtrace_dump_prefix()).c_str());
+    }
+
+    if (g_debug->TrackPointers()) {
+      g_debug->pointer->DumpPeakInfo();
     }
 
     // 对于调试工具或在调试模式下运行的代码, 资源管理可能不是首要关注点.
@@ -316,7 +321,7 @@ int debug_close(int fd) {
 }
 
 void* debug_mmap(void* addr, size_t size, int prot, int flags, int fd, off_t offset) {
-  if (DebugCallsDisabled() || addr != nullptr || fd >= 0) {
+  if (DebugCallsDisabled() || addr != nullptr || fd >= 0 || (flags & MAP_POPULATE) == 0) {
     return m_sys_mmap(addr, size, prot, flags, fd, offset);
   }
 
