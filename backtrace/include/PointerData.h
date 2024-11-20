@@ -6,8 +6,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <memory>
 #include <vector>
-#include <set>
 #include <unordered_map>
 #include <mutex>
 
@@ -64,18 +64,9 @@ inline bool operator<(const timeval& lhs, const timeval& rhs) {
 struct PointerInfoType {
   size_t size;
   size_t hash_index;
-  timeval alloc_time;
   MemType mem_type;
+  timeval alloc_time;
   size_t RealSize() const { return size & ~(1U << 31); }
-  // Zygote 是一个非常重要的进程，它是系统启动时创建的第一个用户进程。
-  // Zygote 的主要功能是预加载类和资源，然后通过 fork() 创建其他应用程序进程
-  bool ZygoteChildAlloc() const { return size & (1U << 31); }
-  static size_t GetEncodedSize(size_t size) {
-    return GetEncodedSize(ZYGOTE_CHILD, size);
-  }
-  static size_t GetEncodedSize(bool child_alloc, size_t size) {
-    return size | ((child_alloc) ? (1U << 31) : 0);
-  }
   static size_t MaxSize() { return (1U << 31) - 1; }
 };
 
@@ -83,12 +74,12 @@ struct ListInfoType {
   uintptr_t pointer;
   size_t num_allocations;
   size_t size;
-  timeval alloc_time;
   MemType mem_type;
-  bool zygote_child_alloc;
   FrameInfoType* frame_info;
-  std::vector<unwindstack::FrameData> backtrace_info;
+  std::shared_ptr<std::vector<unwindstack::FrameData>> backtrace_info;
+  timeval alloc_time;
 };
+using Pred = std::function<bool(const ListInfoType&, const ListInfoType&)>;
 
 class PointerData {
 public:
@@ -117,8 +108,8 @@ private:
   inline uintptr_t ManglePointer(uintptr_t pointer) { return pointer ^ UINTPTR_MAX; }
   inline uintptr_t DemanglePointer(uintptr_t pointer) { return pointer ^ UINTPTR_MAX; }
 
-  void GetList(std::vector<ListInfoType>* list, std::set<timeval>* info, bool only_with_backtrace);
-  void GetUniqueList(std::vector<ListInfoType>* list, std::set<timeval>* info, bool only_with_backtrace);
+  void GetList(std::vector<ListInfoType>* list, bool only_with_backtrace, Pred pred);
+  void GetUniqueList(std::vector<ListInfoType>* list, bool only_with_backtrace);
 
   static std::atomic_uint8_t backtrace_enabled_;
 
@@ -128,13 +119,13 @@ private:
   std::mutex frame_mutex_;
   std::unordered_map<FrameKeyType, size_t> key_to_index_;
   std::unordered_map<size_t, FrameInfoType> frames_;
-  std::unordered_map<size_t, std::vector<unwindstack::FrameData>> backtraces_info_;
+  std::unordered_map<size_t, std::shared_ptr<std::vector<unwindstack::FrameData>>> backtraces_info_;
   size_t cur_hash_index_;
 
   size_t current_used, current_host, current_dma;
   size_t peak_tot, peak_host, peak_dma;
-  std::set<timeval> peak_info;
   std::vector<ListInfoType> peak_list;
+  timeval peak_time;
 
   BIONIC_DISALLOW_COPY_AND_ASSIGN(PointerData);
 };

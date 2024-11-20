@@ -287,19 +287,22 @@ int debug_posix_memalign(void** memptr, size_t alignment, size_t size) {
 }
 
 int debug_ioctl(int fd, unsigned int request, void* arg) {
-  if (DebugCallsDisabled()) {
+  if (DebugCallsDisabled() || request != DMA_HEAP_IOCTL_ALLOC) {
     return m_sys_ioctl(fd, request, arg);
   }
 
   ScopedConcurrentLock lock;
   ScopedDisableDebugCalls disable;
 
+  struct dma_heap_allocation_data* heap_data = (struct dma_heap_allocation_data*)arg;
+  if (heap_data->len > PointerInfoType::MaxSize()) {
+    errno = ENOMEM;
+    return -1;
+  }
+
   int ret = m_sys_ioctl(fd, request, arg);
-  if (request == DMA_HEAP_IOCTL_ALLOC) {
-      struct dma_heap_allocation_data* heap_data = (struct dma_heap_allocation_data*)arg;
-      if (g_debug->TrackPointers()) {
-        g_debug->pointer->AddDMA(heap_data->fd, heap_data->len);
-      }
+  if (g_debug->TrackPointers()) {
+    g_debug->pointer->AddDMA(heap_data->fd, heap_data->len);
   }
 
   return ret;
@@ -327,6 +330,11 @@ void* debug_mmap(void* addr, size_t size, int prot, int flags, int fd, off_t off
 
   ScopedConcurrentLock lock;
   ScopedDisableDebugCalls disable;
+
+  if (size > PointerInfoType::MaxSize()) {
+    errno = ENOMEM;
+    return nullptr;
+  }
 
   void* result = m_sys_mmap(addr, size, prot, flags, fd, offset);
   if (g_debug->TrackPointers()) {
