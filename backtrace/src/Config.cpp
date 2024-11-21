@@ -1,6 +1,6 @@
 #include <cassert>
 #include <cstdio>
-#include <reserved_signals.h>
+#include <bionic/reserved_signals.h>
 
 #include "Config.h"
 

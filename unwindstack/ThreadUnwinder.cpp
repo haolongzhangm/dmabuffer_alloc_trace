@@ -161,7 +161,8 @@ ThreadEntry* ThreadUnwinder::SendSignalToThread(int signal, pid_t tid) {
 
 void ThreadUnwinder::UnwindWithSignal(int signal, pid_t tid, std::unique_ptr<Regs>* initial_regs,
                                       const std::vector<std::string>* initial_map_names_to_skip,
-                                      const std::vector<std::string>* map_suffixes_to_ignore) {
+                                      const std::vector<std::string>* map_suffixes_to_ignore,
+                                      const std::vector<std::string>* mangle_function_to_exit) {
   ClearErrors();
   if (tid == static_cast<pid_t>(android::base::GetThreadId())) {
     last_error_.code = ERROR_UNSUPPORTED;
@@ -182,7 +183,7 @@ void ThreadUnwinder::UnwindWithSignal(int signal, pid_t tid, std::unique_ptr<Reg
     initial_regs->reset(regs->Clone());
   }
   SetRegs(regs.get());
-  UnwinderFromPid::Unwind(initial_map_names_to_skip, map_suffixes_to_ignore);
+  UnwinderFromPid::Unwind(initial_map_names_to_skip, map_suffixes_to_ignore, mangle_function_to_exit);
 
   // Tell the signal handler to exit and release the entry.
   entry->Wake();

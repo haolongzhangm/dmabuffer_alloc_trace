@@ -32,6 +32,7 @@
 
 #include <string>
 #include <vector>
+#include "unwindstack/Error.h"
 
 #include <android-base/stringprintf.h>
 #include <unwindstack/AndroidUnwinder.h>
@@ -39,21 +40,21 @@
 
 #include "UnwindBacktrace.h"
 
-bool Unwind(std::vector<uintptr_t>* frames, std::vector<unwindstack::FrameData>* frame_info,
+unwindstack::ErrorCode Unwind(std::vector<uintptr_t>* frames, std::vector<unwindstack::FrameData>* frame_info,
             size_t max_frames) {
   [[clang::no_destroy]] static unwindstack::AndroidLocalUnwinder unwinder(
-      std::vector<std::string>{"liballoc_hook.so"});
+      std::vector<std::string>{"liballoc_hook.so"}, {}, 
+        std::vector<std::string>{"_Z24__init_additional_stacksP18pthread_internal_t"});
   unwindstack::AndroidUnwinderData data(max_frames);
   if (!unwinder.Unwind(data)) {
     frames->clear();
     frame_info->clear();
-    return false;
+  } else {
+    frames->resize(data.frames.size());
+    for (const auto& frame : data.frames) {
+      frames->at(frame.num) = frame.pc;
+    }
+    *frame_info = std::move(data.frames);
   }
-
-  frames->resize(data.frames.size());
-  for (const auto& frame : data.frames) {
-    frames->at(frame.num) = frame.pc;
-  }
-  *frame_info = std::move(data.frames);
-  return true;
+  return data.error.code;
 }

@@ -13,8 +13,10 @@
 #include "PointerData.h"
 
 #include "android-base/stringprintf.h"
+#include "unwindstack/Error.h"
 
 std::atomic_uint8_t PointerData::backtrace_enabled_ = true;
+constexpr size_t kBacktraceExitIndex = 0;
 constexpr size_t kBacktraceEmptyIndex = 1;
 const char* mtype[3] = {"host", "mmap", "dma"};
 
@@ -66,6 +68,10 @@ void PointerData::Add(uintptr_t ptr, size_t pointer_size, MemType type) {
   if (backtrace_enabled_) {
     hash_index = AddBacktrace(g_debug->config().backtrace_frames(), pointer_size);
   }
+
+  // unwind 跳过的函数，不记录其堆栈和 pointer 信息
+  if (hash_index == kBacktraceExitIndex)
+    return;
 
   std::lock_guard<std::mutex> pointer_guard(pointer_mutex_);
   struct timeval tv;
@@ -159,8 +165,14 @@ size_t PointerData::AddBacktrace(size_t num_frames, size_t size_bytes) {
   std::vector<uintptr_t> frames;
   std::vector<unwindstack::FrameData> frames_info;
   if (g_debug->config().options() & BACKTRACE) {
-    if (!Unwind(&frames, &frames_info, num_frames)) {
-      return kBacktraceEmptyIndex;
+    switch (Unwind(&frames, &frames_info, num_frames)) {
+      case unwindstack::ERROR_NONE:
+      case unwindstack::ERROR_MAX_FRAMES_EXCEEDED:
+        break;
+      case unwindstack::ERROR_EXIT_FUNC:
+        return kBacktraceExitIndex;
+      default:
+        return kBacktraceEmptyIndex;
     }
   } else {
     return kBacktraceEmptyIndex;

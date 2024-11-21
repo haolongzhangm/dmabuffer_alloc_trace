@@ -39,15 +39,7 @@
 #include <unwindstack/Unwinder.h>
 
 #if defined(__BIONIC__)
-
-#define BIONIC_SIGNAL_POSIX_TIMERS (__SIGRTMIN + 0)
-#define BIONIC_SIGNAL_BACKTRACE (__SIGRTMIN + 1)
-#define BIONIC_SIGNAL_DEBUGGER (__SIGRTMIN + 3)
-#define BIONIC_SIGNAL_PROFILER (__SIGRTMIN + 4)
-#define BIONIC_SIGNAL_ART_PROFILER (__SIGRTMIN + 6)
-#define BIONIC_SIGNAL_FDTRACK (__SIGRTMIN + 7)
-#define BIONIC_SIGNAL_RUN_ON_ALL_THREADS (__SIGRTMIN + 8)
-
+#include <bionic/reserved_signals.h>
 static constexpr int kThreadUnwindSignal = BIONIC_SIGNAL_BACKTRACE;
 #else
 #include <signal.h>
@@ -178,7 +170,7 @@ bool AndroidUnwinder::Unwind(Regs* initial_regs, AndroidUnwinderData& data) {
   unwinder.SetJitDebug(jit_debug_.get());
   unwinder.SetDexFiles(dex_files_.get());
   unwinder.Unwind(data.show_all_frames ? nullptr : &initial_map_names_to_skip_,
-                  &map_suffixes_to_ignore_);
+                  &map_suffixes_to_ignore_, &mangle_function_to_exit_);
   data.frames = unwinder.ConsumeFrames();
   data.error = unwinder.LastError();
   return data.frames.size() != 0;
@@ -205,7 +197,7 @@ bool AndroidLocalUnwinder::InternalUnwind(std::optional<pid_t> tid, AndroidUnwin
   }
   unwinder.UnwindWithSignal(kThreadUnwindSignal, *tid, initial_regs,
                             data.show_all_frames ? nullptr : &initial_map_names_to_skip_,
-                            &map_suffixes_to_ignore_);
+                            &map_suffixes_to_ignore_, &mangle_function_to_exit_);
   data.frames = unwinder.ConsumeFrames();
   data.error = unwinder.LastError();
   return data.frames.size() != 0;

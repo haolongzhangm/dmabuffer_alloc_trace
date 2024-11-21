@@ -11,7 +11,7 @@
 #include <unordered_map>
 #include <mutex>
 
-#include <macros.h>
+#include <bionic/macros.h>
 #include <unwindstack/Unwinder.h>
 
 #include "Config.h"

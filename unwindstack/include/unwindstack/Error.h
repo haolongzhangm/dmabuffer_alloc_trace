@@ -45,6 +45,7 @@ enum ErrorCode : uint8_t {
   ERROR_MAPS_PARSE,             // Failed to parse maps data.
   ERROR_INVALID_PARAMETER,      // Invalid parameter passed to function.
   ERROR_PTRACE_CALL,            // Ptrace call failed while unwinding.
+  ERROR_EXIT_FUNC,              // Exit function.
   ERROR_MAX = ERROR_INVALID_PARAMETER,
 };
 
@@ -80,6 +81,8 @@ static inline const char* GetErrorCodeString(ErrorCode error) {
       return "Invalid parameter";
     case ERROR_PTRACE_CALL:
       return "Ptrace Call Failed";
+    case ERROR_EXIT_FUNC:
+      return "Exit function";
   }
 }
 

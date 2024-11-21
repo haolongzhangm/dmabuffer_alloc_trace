@@ -119,8 +119,19 @@ static bool ShouldStop(const std::vector<std::string>* map_suffixes_to_ignore,
                    map_name.substr(pos + 1)) != map_suffixes_to_ignore->end();
 }
 
+static bool ShouldExit(const std::vector<std::string>* mangle_function_to_exit,
+                       const char* function_name) {
+  if (mangle_function_to_exit == nullptr || function_name == nullptr) {
+    return false;
+  }
+
+  return std::find(mangle_function_to_exit->begin(), mangle_function_to_exit->end(),
+                   function_name) != mangle_function_to_exit->end();
+}
+
 void Unwinder::Unwind(const std::vector<std::string>* initial_map_names_to_skip,
-                      const std::vector<std::string>* map_suffixes_to_ignore) {
+                      const std::vector<std::string>* map_suffixes_to_ignore,
+                      const std::vector<std::string>* mangle_function_to_exit) {
   CHECK(arch_ != ARCH_UNKNOWN);
   ClearErrors();
 
@@ -253,6 +264,11 @@ void Unwinder::Unwind(const std::vector<std::string>* initial_map_names_to_skip,
           !elf->GetFunctionName(step_pc, &frame->function_name, &frame->function_offset)) {
         frame->function_name = "";
         frame->function_offset = 0;
+      }
+      
+      if (ShouldExit(mangle_function_to_exit, frame->function_name.c_str())) {
+        last_error_.code = ERROR_EXIT_FUNC;
+        break;
       }
     }
 
@@ -402,11 +418,12 @@ bool UnwinderFromPid::Init() {
 }
 
 void UnwinderFromPid::Unwind(const std::vector<std::string>* initial_map_names_to_skip,
-                             const std::vector<std::string>* map_suffixes_to_ignore) {
+                             const std::vector<std::string>* map_suffixes_to_ignore,
+                             const std::vector<std::string>* mangle_function_to_exit) {
   if (!Init()) {
     return;
   }
-  Unwinder::Unwind(initial_map_names_to_skip, map_suffixes_to_ignore);
+  Unwinder::Unwind(initial_map_names_to_skip, map_suffixes_to_ignore, mangle_function_to_exit);
 }
 
 FrameData Unwinder::BuildFrameFromPcOnly(uint64_t pc, ArchEnum arch, Maps* maps,

@@ -3,7 +3,7 @@
 #include <sys/syscall.h>
 #include <unistd.h>
 
-#include <reserved_signals.h>
+#include <bionic/reserved_signals.h>
 
 // =============================================================================
 // Used to disable the debug allocation calls.

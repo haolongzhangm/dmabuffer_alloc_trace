@@ -69,6 +69,13 @@ class AndroidUnwinder {
       : pid_(pid),
         initial_map_names_to_skip_(std::move(initial_map_names_to_skip)),
         map_suffixes_to_ignore_(std::move(map_suffixes_to_ignore)) {}
+  AndroidUnwinder(pid_t pid, const std::vector<std::string> initial_map_names_to_skip,
+                  const std::vector<std::string> map_suffixes_to_ignore,
+                  const std::vector<std::string> mangle_function_to_exit)
+      : pid_(pid),
+        initial_map_names_to_skip_(std::move(initial_map_names_to_skip)),
+        map_suffixes_to_ignore_(std::move(map_suffixes_to_ignore)),
+        mangle_function_to_exit_(std::move(mangle_function_to_exit)) {}
   virtual ~AndroidUnwinder() = default;
 
   bool Initialize(ErrorData& error);
@@ -100,6 +107,7 @@ class AndroidUnwinder {
   size_t max_frames_ = kMaxNumFrames;
   std::vector<std::string> initial_map_names_to_skip_;
   std::vector<std::string> map_suffixes_to_ignore_;
+  std::vector<std::string> mangle_function_to_exit_;
   std::once_flag initialize_;
   bool initialize_status_ = false;
 
@@ -131,6 +139,12 @@ class AndroidLocalUnwinder : public AndroidUnwinder {
       : AndroidUnwinder(getpid(), initial_map_names_to_skip, map_suffixes_to_ignore) {
     initial_map_names_to_skip_.emplace_back(kUnwindstackLib);
   }
+  AndroidLocalUnwinder(const std::vector<std::string>& initial_map_names_to_skip,
+                       const std::vector<std::string>& map_suffixes_to_ignore,
+                       const std::vector<std::string>& mangle_function_to_exit)
+      : AndroidUnwinder(getpid(), initial_map_names_to_skip, map_suffixes_to_ignore, mangle_function_to_exit) {
+    initial_map_names_to_skip_.emplace_back(kUnwindstackLib);
+  }
   virtual ~AndroidLocalUnwinder() = default;
 
  protected:
@@ -152,6 +166,10 @@ class AndroidRemoteUnwinder : public AndroidUnwinder {
   AndroidRemoteUnwinder(pid_t pid, const std::vector<std::string> initial_map_names_to_skip,
                         const std::vector<std::string> map_suffixes_to_ignore)
       : AndroidUnwinder(pid, initial_map_names_to_skip, map_suffixes_to_ignore) {}
+  AndroidRemoteUnwinder(pid_t pid, const std::vector<std::string> initial_map_names_to_skip,
+                        const std::vector<std::string> map_suffixes_to_ignore,
+                        const std::vector<std::string>& mangle_function_to_exit)
+      : AndroidUnwinder(pid, initial_map_names_to_skip, map_suffixes_to_ignore, mangle_function_to_exit) {}
   virtual ~AndroidRemoteUnwinder() = default;
 
  protected:

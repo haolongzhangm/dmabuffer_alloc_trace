@@ -324,7 +324,7 @@ int debug_close(int fd) {
 }
 
 void* debug_mmap(void* addr, size_t size, int prot, int flags, int fd, off_t offset) {
-  if (DebugCallsDisabled() || addr != nullptr || fd >= 0 || (flags & MAP_POPULATE) == 0) {
+  if (DebugCallsDisabled() || addr != nullptr || fd >= 0) {
     return m_sys_mmap(addr, size, prot, flags, fd, offset);
   }
 

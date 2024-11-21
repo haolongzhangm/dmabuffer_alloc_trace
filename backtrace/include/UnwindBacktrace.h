@@ -33,4 +33,4 @@
 
 #include <unwindstack/Unwinder.h>
 
-bool Unwind(std::vector<uintptr_t>* frames, std::vector<unwindstack::FrameData>* info, size_t max_frames);
+unwindstack::ErrorCode Unwind(std::vector<uintptr_t>* frames, std::vector<unwindstack::FrameData>* info, size_t max_frames);
