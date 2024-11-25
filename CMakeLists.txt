@@ -20,17 +20,8 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 endif()
 
-add_subdirectory(aosp_file)
 add_subdirectory(unwindstack/cmake)
 add_subdirectory(backtrace)
-
-if (ANDROID_ABI MATCHES "arm64-v8a")
-    set(VNDK_LIB_PATH "${CMAKE_CURRENT_SOURCE_DIR}/aosp_file/com.android.vndk.v30/lib64")
-    set(APEX_LIB_PATH "${CMAKE_CURRENT_SOURCE_DIR}/aosp_file/com.android.runtime/lib64")
-else ()
-    set(VNDK_LIB_PATH "${CMAKE_CURRENT_SOURCE_DIR}/aosp_file/com.android.vndk.v30/lib")
-    set(APEX_LIB_PATH "${CMAKE_CURRENT_SOURCE_DIR}/aosp_file/com.android.runtime/lib")
-endif ()
 
 # 添加 .so
 add_library(alloc_hook SHARED ${CMAKE_SOURCE_DIR}/src/alloc_hook.cpp)
@@ -38,11 +29,6 @@ add_library(alloc_hook SHARED ${CMAKE_SOURCE_DIR}/src/alloc_hook.cpp)
 target_link_libraries(alloc_hook PRIVATE helper)
 # 安装到 out/lib 目录
 install(TARGETS alloc_hook DESTINATION ${CMAKE_INSTALL_PREFIX}/out/lib)
-
-add_library(checkleak SHARED ${CMAKE_SOURCE_DIR}/src/checkleak.cpp)
-target_link_directories(checkleak PRIVATE ${VNDK_LIB_PATH} ${APEX_LIB_PATH})
-target_link_libraries(checkleak PRIVATE log backtrace backtrace_header c_malloc_debug)
-install(TARGETS checkleak DESTINATION ${CMAKE_INSTALL_PREFIX}/out/lib)
 
 # copy database compile_commands.json to PROJECT_SOURCE_DIR
 add_custom_target(
