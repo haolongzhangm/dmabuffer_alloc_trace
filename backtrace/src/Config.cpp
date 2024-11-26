@@ -1,21 +1,21 @@
+#include <bionic/reserved_signals.h>
 #include <cassert>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <bionic/reserved_signals.h>
 
 #include "Config.h"
 
-
 static constexpr size_t DEFAULT_BACKTRACE_FRAMES = 128;
-static constexpr const char DEFAULT_BACKTRACE_DUMP_PREFIX[] = "/data/local/tmp/trace/backtrace_heap";
+static constexpr const char DEFAULT_BACKTRACE_DUMP_PREFIX[] =
+        "/data/local/tmp/trace/backtrace_heap";
 
 static bool ParseValue(const char* value, size_t* parsed_value) {
     *parsed_value = 0;
     if (value == nullptr) {
-        return  false;
+        return false;
     }
-    *parsed_value = static_cast<size_t>(atol(value));
+    *parsed_value = static_cast<size_t>(atol(value)) * 1024 * 1024;
     return true;
 }
 
@@ -44,7 +44,7 @@ bool Config::Init() {
 
     // 通过信号插入 check point
     options_ |= DUMP_ON_SINGAL;
-    backtrace_dump_signal_ = BIONIC_SIGNAL_BACKTRACE; // BIONIC_SIGNAL_BACKTRACE: 33
+    backtrace_dump_signal_ = BIONIC_SIGNAL_BACKTRACE;  // BIONIC_SIGNAL_BACKTRACE: 33
 
     return true;
 }

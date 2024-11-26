@@ -8,7 +8,6 @@ use to get malloc and free backtrace, include dmabuffer by hook `ioctl` and `clo
 
 * how to use
   * adb shell mkdir `path`, where `path` is the output path for the unwindstack, default: `/data/local/tmp/trace/backtrace_heap`
-  * Config Options at `backtrace/src/Config.cpp`
   * LD_PRELOAD=liballoc_hook.so LD_LIBRARY_PATH=. ls
   * then replace `ls` to you real command
   * 如果要抓 trace 请先创建 trace 的输出目录
@@ -94,23 +93,25 @@ use to get malloc and free backtrace, include dmabuffer by hook `ioctl` and `clo
   +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
   host peak used: 415MB, dma peak used 206MB, total peak used: 619MB
   ```
-  - 然后，根据 total peak used 的值，通过环境变量设置 backtrace_dump_peak_val_ 的值，通常要小于 total peak used 50MB 左右，设置方式如下
+  - 然后，根据 total peak used 的值，通过环境变量 `DUMP_PEAK_VALUE_MB` 设置 backtrace_dump_peak_val_ 的值，通常要小于 total peak used 50MB 左右，设置方式如下
   ```
-  export DUMP_PEAK_VAL_MB = xxx
+  export DUMP_PEAK_VALUE_MB = xxx
 
   或者
 
-  DUMP_PEAK_VAL_MB=xxx LD_PRELOAD=liballoc_hook.so LD_LIBRARY_PATH=. ls
+  DUMP_PEAK_VALUE_MB=xxx LD_PRELOAD=liballoc_hook.so LD_LIBRARY_PATH=. ls
   ```
+  - DUMP_PEAK_VALUE_MB 的单位默认为 MB
 
 * 配置参数意义
-  - 'backtrace_dump_on_exit_': 程序退出时，打印堆栈
-  - 'backtrace_frames_': 抓取堆栈的最大深度，默认 128
-  - 'backtrace_dump_prefix_'：输出堆栈信息的文件名前缀
-  - 'BACKTRACE_SPECIFIC_SIZES': 分配内存时，是否抓取指定 alloc size 的堆栈信息
-  - 'backtrace_min_size_bytes_': 开启 BACKTRACE_SPECIFIC_SIZES 标志时，抓取 alloc size 大于该值的堆栈信息
-  - 'backtrace_max_size_bytes_'：开启 BACKTRACE_SPECIFIC_SIZES 标志时，抓取 alloc size 小于该值的堆栈信息
-  - 'RECORD_MEMORY_PEAK' : 是否抓取峰值时刻的堆栈信息
-  - 'backtrace_dump_peak_val_'：当峰值大于该值时，记录峰值时刻的堆栈
-  - 'DUMP_ON_SINGAL': 开启 checkpoint 信号机制
-  - 'backtrace_dump_signal_': checkpoint 信号机制的信号值，默认 33
+  - `backtrace_dump_on_exit_`: 程序退出时，打印堆栈
+  - `backtrace_frames_`: 抓取堆栈的最大深度，默认 128
+  - `backtrace_dump_prefix_`: 输出堆栈信息的文件名前缀
+  - `BACKTRACE_SPECIFIC_SIZES`: 分配内存时，是否抓取指定 alloc size 的堆栈信息
+  - `backtrace_min_size_bytes_`: 开启 BACKTRACE_SPECIFIC_SIZES 标志时，抓取 alloc size 大于该值的堆栈信息
+  - `backtrace_max_size_bytes_`: 开启 BACKTRACE_SPECIFIC_SIZES 标志时，抓取 alloc size 小于该值的堆栈信息
+  - `RECORD_MEMORY_PEAK`: 是否抓取峰值时刻的堆栈信息
+  - `backtrace_dump_peak_val_`: 当峰值大于该值时，记录峰值时刻的堆栈
+  - `DUMP_ON_SINGAL`: 开启 checkpoint 信号机制
+  - `backtrace_dump_signal_`: checkpoint 信号机制的信号值，默认 33
+  - `配置文件位于 backtrace/src/Config.cpp, 可在该文件中修改上述参数`

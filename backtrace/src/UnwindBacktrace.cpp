@@ -40,21 +40,23 @@
 
 #include "UnwindBacktrace.h"
 
-unwindstack::ErrorCode Unwind(std::vector<uintptr_t>* frames, std::vector<unwindstack::FrameData>* frame_info,
-            size_t max_frames) {
-  [[clang::no_destroy]] static unwindstack::AndroidLocalUnwinder unwinder(
-      std::vector<std::string>{"liballoc_hook.so"}, {}, 
-        std::vector<std::string>{"_Z24__init_additional_stacksP18pthread_internal_t"});
-  unwindstack::AndroidUnwinderData data(max_frames);
-  if (!unwinder.Unwind(data)) {
-    frames->clear();
-    frame_info->clear();
-  } else {
-    frames->resize(data.frames.size());
-    for (const auto& frame : data.frames) {
-      frames->at(frame.num) = frame.pc;
+unwindstack::ErrorCode Unwind(
+        std::vector<uintptr_t>* frames, std::vector<unwindstack::FrameData>* frame_info,
+        size_t max_frames) {
+    [[clang::no_destroy]] static unwindstack::AndroidLocalUnwinder unwinder(
+            std::vector<std::string>{"liballoc_hook.so"}, {},
+            std::vector<std::string>{
+                    "_Z24__init_additional_stacksP18pthread_internal_t"});
+    unwindstack::AndroidUnwinderData data(max_frames);
+    if (!unwinder.Unwind(data)) {
+        frames->clear();
+        frame_info->clear();
+    } else {
+        frames->resize(data.frames.size());
+        for (const auto& frame : data.frames) {
+            frames->at(frame.num) = frame.pc;
+        }
+        *frame_info = std::move(data.frames);
     }
-    *frame_info = std::move(data.frames);
-  }
-  return data.error.code;
+    return data.error.code;
 }

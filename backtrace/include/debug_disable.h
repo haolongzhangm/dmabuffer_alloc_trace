@@ -15,20 +15,20 @@ bool DebugCallsDisabled();
 void DebugDisableSet(bool disable);
 
 class ScopedDisableDebugCalls {
- public:
-  ScopedDisableDebugCalls() : disabled_(DebugCallsDisabled()) {
-    if (!disabled_) {
-      DebugDisableSet(true);
+public:
+    ScopedDisableDebugCalls() : disabled_(DebugCallsDisabled()) {
+        if (!disabled_) {
+            DebugDisableSet(true);
+        }
     }
-  }
-  ~ScopedDisableDebugCalls() {
-    if (!disabled_) {
-      DebugDisableSet(false);
+    ~ScopedDisableDebugCalls() {
+        if (!disabled_) {
+            DebugDisableSet(false);
+        }
     }
-  }
 
- private:
-  bool disabled_;
+private:
+    bool disabled_;
 
-  BIONIC_DISALLOW_COPY_AND_ASSIGN(ScopedDisableDebugCalls);
+    BIONIC_DISALLOW_COPY_AND_ASSIGN(ScopedDisableDebugCalls);
 };

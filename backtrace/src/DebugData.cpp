@@ -7,7 +7,7 @@ bool DebugData::Initialize(void* storage) {
 
     pointer.reset(new (storage) PointerData());
     if (!pointer->Initialize(config_)) {
-      return false;
+        return false;
     }
 
     return true;

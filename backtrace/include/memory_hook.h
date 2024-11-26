@@ -10,5 +10,6 @@ extern void* (*m_sys_memalign)(size_t, size_t);
 extern int (*m_sys_posix_memalign)(void**, size_t, size_t);
 extern int (*m_sys_ioctl)(int fd, unsigned int request, ...);
 extern int (*m_sys_close)(int fd);
-extern void* (*m_sys_mmap)(void* addr, size_t size, int prot, int flags, int fd, off_t offset);
+extern void* (*m_sys_mmap)(
+        void* addr, size_t size, int prot, int flags, int fd, off_t offset);
 extern int (*m_sys_munmap)(void* addr, size_t size);
