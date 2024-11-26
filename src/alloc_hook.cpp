@@ -12,9 +12,9 @@ void __attribute__((constructor(111))) check(void) {
 
 class AllocHook {
 public:
-    AllocHook() { 
-        void* ptr [2] = { &Db_storage, &Pd_storage }; 
-        debug_initialize(ptr); 
+    AllocHook() {
+        void* ptr[2] = {&Db_storage, &Pd_storage};
+        debug_initialize(ptr);
     }
     ~AllocHook() { debug_finalize(); }
 
@@ -22,10 +22,14 @@ public:
     void free(void* ptr) { debug_free(ptr); }
     void* calloc(size_t a, size_t b) { return debug_calloc(a, b); }
     void* realloc(void* ptr, size_t size) { return debug_realloc(ptr, size); }
-    int posix_memalign(void** ptr, size_t alignment, size_t size) { return debug_posix_memalign(ptr, alignment, size); }
+    int posix_memalign(void** ptr, size_t alignment, size_t size) {
+        return debug_posix_memalign(ptr, alignment, size);
+    }
     int ioctl(int fd, int request, void* arg) { return debug_ioctl(fd, request, arg); }
     int close(int fd) { return debug_close(fd); }
-    void* mmap(void* addr, size_t size, int prot, int flags, int fd, off_t offset) { return debug_mmap(addr, size, prot, flags, fd, offset); }
+    void* mmap(void* addr, size_t size, int prot, int flags, int fd, off_t offset) {
+        return debug_mmap(addr, size, prot, flags, fd, offset);
+    }
     int munmap(void* addr, size_t size) { return debug_munmap(addr, size); }
 
     void checkpoint(const char* file_name) { return debug_dump_heap(file_name); }
@@ -34,10 +38,12 @@ public:
 
 private:
     static std::aligned_storage<sizeof(DebugData), alignof(DebugData)>::type Db_storage;
-    static std::aligned_storage<sizeof(PointerData), alignof(PointerData)>::type Pd_storage;
+    static std::aligned_storage<sizeof(PointerData), alignof(PointerData)>::type
+            Pd_storage;
 };
 std::aligned_storage<sizeof(DebugData), alignof(DebugData)>::type AllocHook::Db_storage;
-std::aligned_storage<sizeof(PointerData), alignof(PointerData)>::type AllocHook::Pd_storage;
+std::aligned_storage<sizeof(PointerData), alignof(PointerData)>::type
+        AllocHook::Pd_storage;
 
 AllocHook& AllocHook::inst() {
     static AllocHook hook;
@@ -94,5 +100,4 @@ int munmap(void* addr, size_t size) {
 void checkpoint(const char* file_name) {
     AllocHook::inst().checkpoint(file_name);
 }
-
 }
