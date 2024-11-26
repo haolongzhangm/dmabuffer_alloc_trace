@@ -7,19 +7,14 @@ use to get malloc and free backtrace, include dmabuffer by hook `ioctl` and `clo
   * ./build_android.sh [armeabi-v7a]
 
 * how to use
-  * adb shell mkdir `path`, where `path` is the output path for the unwindstack, default: `/data/local/tmp/trace`
-  * Config Options at `/dmabuffer_alloc_trace/backtrace/src/Config.cpp`
+  * adb shell mkdir `path`, where `path` is the output path for the unwindstack, default: `/data/local/tmp/trace/backtrace_heap`
+  * Config Options at `backtrace/src/Config.cpp`
   * LD_PRELOAD=liballoc_hook.so LD_LIBRARY_PATH=. ls
   * then replace `ls` to you real command
   * 如果要抓 trace 请先创建 trace 的输出目录
 
-* how to visualize
-  * 只是一个 demo，可视化功能固定显示 30ms，并不是内存生命周期就是 30ms
-  * adb pull `path` `dest`
-  * python3 tools/merge_trace.py `dest/xxxx.txt` `xxx.html`
-
 * checkpoint
-  * 支持在程序指定位置插入检查点，输出当前时刻的堆栈信息
+  * 支持在程序指定位置插入检查点，输出当前时刻的未释放的内存的堆栈信息
   * 第一种方式：使用信号的方式触发堆栈输出，默认信号值为 33，可以在上述配置文件 Config.cpp 中修改，trace 文件以当前时间命名
     ``` C++
       #include <unistd.h>
@@ -63,8 +58,6 @@ use to get malloc and free backtrace, include dmabuffer by hook `ioctl` and `clo
                 ./xxxx;"
     ```
 
-  ```
-
 * 如何改造自己的被测试程序以便此工具能`有效`采样
 
   另外在采样过程中，也请务必保证程序处于`停止`状态，常见的做法是在被测试的代码适当位置加上 checkpoint() 或者 kill(getpid(), 33) 以便触发采样，
@@ -94,3 +87,30 @@ use to get malloc and free backtrace, include dmabuffer by hook `ioctl` and `clo
   ```
 
   典型的，我们需要让整个 pipline 运行几次分别得到不同运行次数的采样 trace, 当然除了 checkpoint/kill 让程序`暂停`外，我们也可以通过 `gdb` 等调试工具来达到相同的目的。关键在于加的位置，一定是你认为这个点应该释放了资源，比如典型的上面的 free_ctx，一定不要在其他点去进行采样，比如 `use_ctx` 阶段，这个时候本身属于内存用量高峰，即使没有释放也不能说明`泄漏`对吧。
+
+* 抓取峰值步骤
+  - 首先运行一次程序，当程序结束时，会输出如下信息
+  ```
+  +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+  host peak used: 415MB, dma peak used 206MB, total peak used: 619MB
+  ```
+  - 然后，根据 total peak used 的值，通过环境变量设置 backtrace_dump_peak_val_ 的值，通常要小于 total peak used 50MB 左右，设置方式如下
+  ```
+  export DUMP_PEAK_VAL_MB = xxx
+
+  或者
+
+  DUMP_PEAK_VAL_MB=xxx LD_PRELOAD=liballoc_hook.so LD_LIBRARY_PATH=. ls
+  ```
+
+* 配置参数意义
+  - 'backtrace_dump_on_exit_': 程序退出时，打印堆栈
+  - 'backtrace_frames_': 抓取堆栈的最大深度，默认 128
+  - 'backtrace_dump_prefix_'：输出堆栈信息的文件名前缀
+  - 'BACKTRACE_SPECIFIC_SIZES': 分配内存时，是否抓取指定 alloc size 的堆栈信息
+  - 'backtrace_min_size_bytes_': 开启 BACKTRACE_SPECIFIC_SIZES 标志时，抓取 alloc size 大于该值的堆栈信息
+  - 'backtrace_max_size_bytes_'：开启 BACKTRACE_SPECIFIC_SIZES 标志时，抓取 alloc size 小于该值的堆栈信息
+  - 'RECORD_MEMORY_PEAK' : 是否抓取峰值时刻的堆栈信息
+  - 'backtrace_dump_peak_val_'：当峰值大于该值时，记录峰值时刻的堆栈
+  - 'DUMP_ON_SINGAL': 开启 checkpoint 信号机制
+  - 'backtrace_dump_signal_': checkpoint 信号机制的信号值，默认 33
