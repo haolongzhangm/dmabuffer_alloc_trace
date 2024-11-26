@@ -48,7 +48,7 @@ DebugData* g_debug;
 
 static void singal_dump_heap(int) {
   if ((g_debug->config().options() & BACKTRACE)) {
-    debug_dump_heap(android::base::StringPrintf("%s_time.%ld..txt",
+    debug_dump_heap(android::base::StringPrintf("%s.time.%ld.txt",
                                         g_debug->config().backtrace_dump_prefix(), 
                                         time(NULL)).c_str());
   }
@@ -123,8 +123,9 @@ void debug_finalize() {
     DebugDisableSet(true);
 
     if ((g_debug->config().options() & BACKTRACE) && g_debug->config().backtrace_dump_on_exit()) {
-        debug_dump_heap(android::base::StringPrintf("%s.exit.txt",
-                                                    g_debug->config().backtrace_dump_prefix()).c_str());
+        debug_dump_heap(android::base::StringPrintf("%s.exit.%ld.txt",
+                                                    g_debug->config().backtrace_dump_prefix(), 
+                                                    time(NULL)).c_str());
     }
 
     if (g_debug->TrackPointers()) {

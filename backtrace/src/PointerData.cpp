@@ -15,7 +15,6 @@
 #include "android-base/stringprintf.h"
 #include "unwindstack/Error.h"
 
-std::atomic_uint8_t PointerData::backtrace_enabled_ = true;
 constexpr size_t kBacktraceExitIndex = 0;
 constexpr size_t kBacktraceEmptyIndex = 1;
 const char* mtype[3] = {"host", "mmap", "dma"};
@@ -43,31 +42,12 @@ bool PointerData::Initialize(const Config& config) {
   current_used = current_host = current_dma = 0;
   peak_tot = peak_host = peak_dma = 0;
 
-  if (config.backtrace_sampling()) {
-    // 设置信号处理函数
-    signal(SIGALRM, ToggleBacktraceEnabled);
-
-    // 配置定时器
-    struct itimerval timer;
-    // 采样间隔
-    timer.it_interval.tv_sec = 0;
-    timer.it_interval.tv_usec = config.backtrace_interval();
-    // 延迟时间
-    timer.it_value.tv_sec = 0;
-    timer.it_value.tv_usec = config.backtrace_interval();
-
-    // 启动定时器
-    setitimer(ITIMER_REAL, &timer, nullptr);
-  }
-
   return true;
 }
 
 void PointerData::Add(uintptr_t ptr, size_t pointer_size, MemType type) {
   size_t hash_index = 0;
-  if (backtrace_enabled_) {
-    hash_index = AddBacktrace(g_debug->config().backtrace_frames(), pointer_size);
-  }
+  hash_index = AddBacktrace(g_debug->config().backtrace_frames(), pointer_size);
 
   // unwind 跳过的函数，不记录其堆栈和 pointer 信息
   if (hash_index == kBacktraceExitIndex)
@@ -86,12 +66,10 @@ void PointerData::Add(uintptr_t ptr, size_t pointer_size, MemType type) {
       *peak = *current;
   }
   if (peak_tot < current_used) {
-    peak_time = tv;
     peak_tot = current_used;
-    size_t dump_peak_increment = g_debug->config().backtrace_dump_peak_increment();
-    size_t dump_peak_val = g_debug->config().backtrace_dump_peak_val();
-    bool dump_peak = (g_debug->config().options() & RECORD_MEMORY_PEAK);
-    if (dump_peak && peak_tot > dump_peak_val && pointer_size > dump_peak_increment) {
+
+    if ((g_debug->config().options() & RECORD_MEMORY_PEAK) 
+          && peak_tot > g_debug->config().backtrace_dump_peak_val()) {
         std::lock_guard<std::mutex> frame_guard(frame_mutex_);
         peak_list.clear();
         GetUniqueList(&peak_list, true);
@@ -177,6 +155,7 @@ size_t PointerData::AddBacktrace(size_t num_frames, size_t size_bytes) {
   } else {
     return kBacktraceEmptyIndex;
   }
+
   FrameKeyType key{.num_frames = frames.size(), .frames = frames.data()};
   size_t hash_index;
   std::lock_guard<std::mutex> frame_guard(frame_mutex_);

@@ -88,9 +88,6 @@ public:
 
   bool Initialize(const Config& config);
 
-  bool ShouldBacktrace() { return backtrace_enabled_ == 1; }
-  static void ToggleBacktraceEnabled(int /*signum*/) { backtrace_enabled_.fetch_xor(1); }
-
   size_t AddBacktrace(size_t num_frames, size_t size_bytes);
   void RemoveBacktrace(size_t hash_index);
 
@@ -111,8 +108,6 @@ private:
   void GetList(std::vector<ListInfoType>* list, bool only_with_backtrace, Pred pred);
   void GetUniqueList(std::vector<ListInfoType>* list, bool only_with_backtrace);
 
-  static std::atomic_uint8_t backtrace_enabled_;
-
   std::mutex pointer_mutex_;
   std::unordered_map<uintptr_t, PointerInfoType> pointers_;
 
@@ -125,7 +120,6 @@ private:
   size_t current_used, current_host, current_dma;
   size_t peak_tot, peak_host, peak_dma;
   std::vector<ListInfoType> peak_list;
-  timeval peak_time;
 
   BIONIC_DISALLOW_COPY_AND_ASSIGN(PointerData);
 };
