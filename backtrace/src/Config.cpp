@@ -15,7 +15,7 @@ static bool ParseValue(const char* value, size_t* parsed_value) {
     if (value == nullptr) {
         return  false;
     }
-    *parsed_value = static_cast<size_t>(atol(value));
+    *parsed_value = static_cast<size_t>(atol(value)) * 1024 * 1024;
     return true;
 }
 
