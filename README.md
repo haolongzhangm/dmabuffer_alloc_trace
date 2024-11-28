@@ -95,7 +95,7 @@ use to get malloc and free backtrace, include dmabuffer by hook `ioctl` and `clo
   ```
   - 然后，根据 total peak used 的值，通过环境变量 `DUMP_PEAK_VALUE_MB` 设置 backtrace_dump_peak_val_ 的值，通常要小于 total peak used 50MB 左右，设置方式如下
   ```
-  export DUMP_PEAK_VALUE_MB = xxx
+  export DUMP_PEAK_VALUE_MB=xxx
 
   或者
 
