@@ -46,7 +46,7 @@ static bool ParseValue(const char* value, size_t* parsed_value) {
 
 bool Config::Init() {
     // 退出时输出 trace
-    backtrace_dump_on_exit_ = true;
+    backtrace_dump_on_exit_ = false;
     backtrace_frames_ = DEFAULT_BACKTRACE_FRAMES;
     backtrace_dump_prefix_ = DEFAULT_BACKTRACE_DUMP_PREFIX;
 
@@ -65,6 +65,7 @@ bool Config::Init() {
         // 记录峰值
         options_ |= RECORD_MEMORY_PEAK;
         backtrace_min_size_bytes_ = 1024;
+        backtrace_dump_on_exit_ = true;
     }
 
     // 通过信号插入 check point
