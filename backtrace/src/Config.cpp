@@ -1,5 +1,6 @@
 #include <bionic/reserved_signals.h>
 #include <cassert>
+#include <cerrno>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -13,9 +14,33 @@ static constexpr const char DEFAULT_BACKTRACE_DUMP_PREFIX[] =
 static bool ParseValue(const char* value, size_t* parsed_value) {
     *parsed_value = 0;
     if (value == nullptr) {
+        printf("Not Set DUMP_PEAK_VALUE_MB\n");
         return false;
     }
-    *parsed_value = static_cast<size_t>(atol(value)) * 1024 * 1024;
+    // Parse the value into a size_t value.
+    errno = 0;
+    char* end;
+    long long_value = strtol(value, &end, 10);
+    if (errno != 0) {
+        printf("Error DUMP_PEAK_VALUE_MB:%s:%s\n", value, strerror(errno));
+        return false;
+    }
+    if (end == value) {
+        printf("Error DUMP_PEAK_VALUE_MB:%s\n", value);
+        return false;
+    }
+    // 指针值相减
+    if (static_cast<size_t>(end - value) != strlen(value)) {
+        printf("Error DUMP_PEAK_VALUE_MB:%s\n", value);
+        return false;
+    }
+    if (long_value < 0) {
+        printf("Error DUMP_PEAK_VALUE_MB:%s\n", value);
+        return false;
+    }
+
+    printf("DUMP_PEAK_VALUE_MB:%zuMB\n", long_value);
+    *parsed_value = static_cast<size_t>(long_value) * 1024 * 1024;
     return true;
 }
 
