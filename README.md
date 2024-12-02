@@ -56,6 +56,14 @@ use to get malloc and free backtrace, include dmabuffer by hook `ioctl` and `clo
                 export LD_LIBRARY_PATH=.; \
                 ./xxxx;"
     ```
+  * 第三种方式：使用 `dlsym` 打开 checkpoint 符号，并用 `LD_PRELOAD=liballoc_hook.so LD_LIBRARY_PATH=. ls` 的方式执行
+  ```c++
+      typedef void (*checkpoint_func)(const char*);
+      auto checkpoint = (checkpoint_func)dlsym(RTLD_DEFAULT, "checkpoint");
+      if (checkpoint) {
+        checkpoint("/data/local/tmp/trace/check_point.1.txt");
+      }
+  ```
 
 * 如何改造自己的被测试程序以便此工具能`有效`采样
 
@@ -103,7 +111,7 @@ use to get malloc and free backtrace, include dmabuffer by hook `ioctl` and `clo
   ```
   - DUMP_PEAK_VALUE_MB 的单位默认为 MB
 
-* 抓取峰值步骤
+* 内存泄露分析步骤
   - 利用 cheakpoint 机制执行两次程序，并对两次的内存调用堆栈输出进行对比，分析内存调用的增量，此时的内存调用是以时间排序，可以从后向前对比
   ``` c++
     void test() {
