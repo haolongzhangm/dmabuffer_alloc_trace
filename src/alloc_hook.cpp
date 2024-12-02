@@ -78,14 +78,23 @@ void free(void* ptr) {
 }
 
 void* calloc(size_t a, size_t b) {
+    if (AllocHook::InitState::before_init) {
+        return m_sys_calloc(a, b);
+    }
     return AllocHook::inst().calloc(a, b);
 }
 
 void* realloc(void* ptr, size_t size) {
+    if (AllocHook::InitState::before_init) {
+        return m_sys_realloc(ptr, size);
+    }
     return AllocHook::inst().realloc(ptr, size);
 }
 
 int posix_memalign(void** ptr, size_t alignment, size_t size) {
+    if (AllocHook::InitState::before_init) {
+        return m_sys_posix_memalign(ptr, alignment, size);
+    }
     return AllocHook::inst().posix_memalign(ptr, alignment, size);
 }
 
@@ -116,6 +125,9 @@ void* mmap(void* addr, size_t size, int prot, int flags, int fd, off_t offset) {
 }
 
 int munmap(void* addr, size_t size) {
+    if (before_main) {
+        return (int)syscall(SYS_munmap, addr, size);
+    }
     return AllocHook::inst().munmap(addr, size);
 }
 
