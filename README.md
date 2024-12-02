@@ -95,13 +95,29 @@ use to get malloc and free backtrace, include dmabuffer by hook `ioctl` and `clo
   ```
   - 然后，根据 total peak used 的值，通过环境变量 `DUMP_PEAK_VALUE_MB` 设置 backtrace_dump_peak_val_ 的值，通常要小于 total peak used 50MB 左右，设置方式如下
   ```
-  export DUMP_PEAK_VALUE_MB = xxx
+  export DUMP_PEAK_VALUE_MB=xxx
 
   或者
 
   DUMP_PEAK_VALUE_MB=xxx LD_PRELOAD=liballoc_hook.so LD_LIBRARY_PATH=. ls
   ```
   - DUMP_PEAK_VALUE_MB 的单位默认为 MB
+
+* 抓取峰值步骤
+  - 利用 cheakpoint 机制执行两次程序，并对两次的内存调用堆栈输出进行对比，分析内存调用的增量，此时的内存调用是以时间排序，可以从后向前对比
+  ``` c++
+    void test() {
+      ....
+    }
+
+    int main() {
+       for (int i = 0; i < 2; ++i) {
+        test();
+        kill(getpid(), 33);
+       }
+    }
+
+  ```
 
 * 配置参数意义
   - `backtrace_dump_on_exit_`: 程序退出时，打印堆栈

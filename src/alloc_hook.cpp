@@ -1,6 +1,6 @@
-#include <dlfcn.h>
 #include <sys/syscall.h>
 
+#include "memory_hook.h"
 #include "DebugData.h"
 #include "PointerData.h"
 #include "malloc_debug.h"
@@ -12,7 +12,17 @@ void __attribute__((constructor(111))) check(void) {
 
 class AllocHook {
 public:
+    struct InitState {
+        InitState() { 
+            init_hook();
+            before_init = true; 
+        }
+        ~InitState() { before_init = false; }
+        static bool before_init;
+    };
+
     AllocHook() {
+        InitState state;
         void* ptr[2] = {&Db_storage, &Pd_storage};
         debug_initialize(ptr);
     }
@@ -44,6 +54,7 @@ private:
 std::aligned_storage<sizeof(DebugData), alignof(DebugData)>::type AllocHook::Db_storage;
 std::aligned_storage<sizeof(PointerData), alignof(PointerData)>::type
         AllocHook::Pd_storage;
+bool AllocHook::InitState::before_init = false;
 
 AllocHook& AllocHook::inst() {
     static AllocHook hook;
@@ -53,10 +64,16 @@ AllocHook& AllocHook::inst() {
 extern "C" {
 
 void* malloc(size_t size) {
+    if (AllocHook::InitState::before_init) {
+        return m_sys_malloc(size);
+    }
     return AllocHook::inst().malloc(size);
 }
 
 void free(void* ptr) {
+    if (AllocHook::InitState::before_init) {
+       return m_sys_free(ptr);
+    }
     AllocHook::inst().free(ptr);
 }
 
@@ -77,11 +94,16 @@ int ioctl(int fd, int request, ...) {
     va_start(ap, request);
     void* arg = va_arg(ap, void*);
     va_end(ap);
-
+    if (AllocHook::InitState::before_init) {
+        return m_sys_ioctl(fd, request, arg);
+    }
     return AllocHook::inst().ioctl(fd, request, arg);
 }
 
 int close(int fd) {
+    if (AllocHook::InitState::before_init) {
+        return m_sys_close(fd);
+    }
     return AllocHook::inst().close(fd);
 }
 

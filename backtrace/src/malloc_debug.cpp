@@ -1,12 +1,8 @@
-#include <dlfcn.h>
-#include <fcntl.h>
 #include <linux/dma-heap.h>
 #include <signal.h>
 #include <sys/mman.h>
 #include <sys/param.h>  // powerof2 ---> ((((x) - 1) & (x)) == 0)
 #include <unistd.h>
-#include <cstdio>
-#include <cstdlib>
 
 #include <android-base/stringprintf.h>
 
@@ -51,35 +47,6 @@ static void singal_dump_heap(int) {
 }
 
 bool debug_initialize(void* init_space[]) {
-#ifdef __OHOS__
-    void* handle = dlopen("libc.so", RTLD_LAZY);
-    if (!handle) {
-        abort();
-    }
-#else
-    void* handle = RTLD_NEXT;
-#endif
-
-#define RESOLVE(name)                                                  \
-    do {                                                               \
-        auto addr = dlsym(handle, #name);                              \
-        if (!addr) {                                                   \
-            abort();                                                   \
-        }                                                              \
-        m_sys_##name = reinterpret_cast<decltype(m_sys_##name)>(addr); \
-    } while (0)
-    RESOLVE(malloc);
-    RESOLVE(free);
-    RESOLVE(calloc);
-    RESOLVE(realloc);
-    RESOLVE(memalign);
-    RESOLVE(posix_memalign);
-    RESOLVE(ioctl);
-    RESOLVE(close);
-    RESOLVE(mmap);
-    RESOLVE(munmap);
-#undef RESOLVE
-
     if (!DebugDisableInitialize()) {
         return false;
     }
