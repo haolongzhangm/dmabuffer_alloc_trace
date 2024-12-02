@@ -46,7 +46,8 @@ unwindstack::ErrorCode Unwind(
     [[clang::no_destroy]] static unwindstack::AndroidLocalUnwinder unwinder(
             std::vector<std::string>{"liballoc_hook.so"}, {},
             std::vector<std::string>{
-                    "_Z24__init_additional_stacksP18pthread_internal_t"});
+                    "_Z24__init_additional_stacksP18pthread_internal_t",
+                    "_Z25__allocate_thread_mappingmm"});
     unwindstack::AndroidUnwinderData data(max_frames);
     if (!unwinder.Unwind(data)) {
         frames->clear();

@@ -292,10 +292,10 @@ void PointerData::DumpLiveToFile(int fd) {
     }
 
     dprintf(fd,
-            "current host used: %zuMB, current dma used %zuMB, current total peak "
-            "used: %zuMB\n",
-            host_use / 1024 / 1024, dma_use / 1024 / 1024,
-            (host_use + dma_use) / 1024 / 1024);
+            "current host used: %fMB, current dma used %fMB, current total peak "
+            "used: %fMB\n",
+            host_use / 1024.0 / 1024.0, dma_use / 1024.0 / 1024.0,
+            (host_use + dma_use) / 1024.0 / 1024.0);
     dprintf(fd,
             "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
             "+++++++++++++++\n\n");
@@ -308,9 +308,9 @@ void PointerData::DumpLiveToFile(int fd) {
                 local_time);
 
         dprintf(fd,
-                "alloc_size:%zuKB \t alloc_type:%s \t alloc_num:%zu \t "
+                "alloc_size:%fKB \t alloc_type:%s \t alloc_num:%zu \t "
                 "alloc_time:%s.%zu\n",
-                info.size / 1024, mtype[info.mem_type], info.num_allocations,
+                info.size / 1024.0, mtype[info.mem_type], info.num_allocations,
                 formatted_time, info.alloc_time.tv_usec / 1000);
         for (size_t i = 0; i < info.backtrace_info->size(); ++i) {
             const unwindstack::FrameData* frame = &info.backtrace_info->at(i);
