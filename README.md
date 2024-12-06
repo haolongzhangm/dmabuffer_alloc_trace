@@ -7,10 +7,11 @@ use to get malloc and free backtrace, include dmabuffer by hook `ioctl` and `clo
   * ./build_android.sh [armeabi-v7a]
 
 * how to use
-  * adb shell mkdir `path`, where `path` is the output path for the unwindstack, default: `/data/local/tmp/trace/backtrace_heap`
+  * adb shell mkdir `path`, where `path` is the output path for the unwindstack, default: `/data/local/tmp/trace/`
   * LD_PRELOAD=liballoc_hook.so LD_LIBRARY_PATH=. ls
   * then replace `ls` to you real command
   * 如果要抓 trace 请先创建 trace 的输出目录
+  * 使用该工具导致程序运行过慢时，可以指定环境 `BACKTRACE_MIN_SIZE` 值，不记录小内存的堆栈信息
 
 * checkpoint
   * 支持在程序指定位置插入检查点，输出当前时刻的未释放的内存的堆栈信息
@@ -138,4 +139,6 @@ use to get malloc and free backtrace, include dmabuffer by hook `ioctl` and `clo
   - `backtrace_dump_peak_val_`: 当峰值大于该值时，记录峰值时刻的堆栈
   - `DUMP_ON_SINGAL`: 开启 checkpoint 信号机制
   - `backtrace_dump_signal_`: checkpoint 信号机制的信号值，默认 33
+  - `DUMP_PEAK_VALUE_MB`：环境变量，单位: MB，当内存峰值大于该值时记录峰值内存
+  - `BACKTRACE_MIN_SIZE`：环境变量，单位: Byte，当申请内存的 size 大于该值时，才抓取堆栈信息
   - `配置文件位于 backtrace/src/Config.cpp, 可在该文件中修改上述参数`
