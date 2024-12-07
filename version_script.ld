@@ -1,7 +1,5 @@
 {
 global:
-    ioctl;
-    close;
     malloc;
     free;
     calloc;

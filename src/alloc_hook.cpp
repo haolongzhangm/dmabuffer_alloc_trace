@@ -35,8 +35,6 @@ public:
     int posix_memalign(void** ptr, size_t alignment, size_t size) {
         return debug_posix_memalign(ptr, alignment, size);
     }
-    int ioctl(int fd, int request, void* arg) { return debug_ioctl(fd, request, arg); }
-    int close(int fd) { return debug_close(fd); }
     void* mmap(void* addr, size_t size, int prot, int flags, int fd, off_t offset) {
         return debug_mmap(addr, size, prot, flags, fd, offset);
     }
@@ -96,24 +94,6 @@ int posix_memalign(void** ptr, size_t alignment, size_t size) {
         return m_sys_posix_memalign(ptr, alignment, size);
     }
     return AllocHook::inst().posix_memalign(ptr, alignment, size);
-}
-
-int ioctl(int fd, int request, ...) {
-    va_list ap;
-    va_start(ap, request);
-    void* arg = va_arg(ap, void*);
-    va_end(ap);
-    if (AllocHook::InitState::before_init) {
-        return m_sys_ioctl(fd, request, arg);
-    }
-    return AllocHook::inst().ioctl(fd, request, arg);
-}
-
-int close(int fd) {
-    if (AllocHook::InitState::before_init) {
-        return m_sys_close(fd);
-    }
-    return AllocHook::inst().close(fd);
 }
 
 void* mmap(void* addr, size_t size, int prot, int flags, int fd, off_t offset) {
