@@ -1,26 +1,22 @@
+#include <sys/mman.h>
 #include <sys/syscall.h>
+#include <unistd.h>
+#include <cstddef>
 
 #include "DebugData.h"
 #include "PointerData.h"
 #include "malloc_debug.h"
 #include "memory_hook.h"
 
-static bool before_main = true;
-void __attribute__((constructor(111))) check(void) {
-    before_main = false;
-}
+struct InitState {
+    InitState() { allocHook_setup = true; }
+    ~InitState() { allocHook_setup = false; }
+    static bool allocHook_setup;
+};
+bool InitState::allocHook_setup = false;
 
 class AllocHook {
 public:
-    struct InitState {
-        InitState() {
-            init_hook();
-            before_init = true;
-        }
-        ~InitState() { before_init = false; }
-        static bool before_init;
-    };
-
     AllocHook() {
         InitState state;
         void* ptr[2] = {&Db_storage, &Pd_storage};
@@ -52,60 +48,71 @@ private:
 std::aligned_storage<sizeof(DebugData), alignof(DebugData)>::type AllocHook::Db_storage;
 std::aligned_storage<sizeof(PointerData), alignof(PointerData)>::type
         AllocHook::Pd_storage;
-bool AllocHook::InitState::before_init = false;
 
 AllocHook& AllocHook::inst() {
     static AllocHook hook;
     return hook;
 }
 
-extern "C" {
+static bool befor_main = true;
+void __attribute__((constructor(201))) check(void) {
+    init_hook();
+    befor_main = false;
+}
 
+extern "C" {
+// 程序初始化会间接调用 malloc 和 free
 void* malloc(size_t size) {
-    if (AllocHook::InitState::before_init) {
-        return m_sys_malloc(size);
+    if (befor_main || InitState::allocHook_setup) {
+        return (void*)syscall(
+                SYS_mmap, 0, PAGE_SIZE, PROT_READ | PROT_WRITE,
+                MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE, -1, 0);
     }
     return AllocHook::inst().malloc(size);
 }
 
 void free(void* ptr) {
-    if (AllocHook::InitState::before_init) {
-        return m_sys_free(ptr);
+    if (befor_main || InitState::allocHook_setup) {
+        syscall(SYS_munmap, ptr, PAGE_SIZE);
+        return;
     }
-    AllocHook::inst().free(ptr);
+    return AllocHook::inst().free(ptr);
 }
 
+// calloc 和 realloc 属于用户级函数
 void* calloc(size_t a, size_t b) {
-    if (AllocHook::InitState::before_init) {
-        return m_sys_calloc(a, b);
+    if (InitState::allocHook_setup) {
+        return (void*)syscall(
+                SYS_mmap, 0, PAGE_SIZE, PROT_READ | PROT_WRITE,
+                MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE, -1, 0);
     }
     return AllocHook::inst().calloc(a, b);
 }
 
 void* realloc(void* ptr, size_t size) {
-    if (AllocHook::InitState::before_init) {
-        return m_sys_realloc(ptr, size);
+    if (InitState::allocHook_setup) {
+        return (void*)syscall(
+                SYS_mmap, 0, PAGE_SIZE, PROT_READ | PROT_WRITE,
+                MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE, -1, 0);
     }
     return AllocHook::inst().realloc(ptr, size);
 }
 
+// 进程初始化 和 debug init 的过程不应该调用 posix_memalign
 int posix_memalign(void** ptr, size_t alignment, size_t size) {
-    if (AllocHook::InitState::before_init) {
-        return m_sys_posix_memalign(ptr, alignment, size);
-    }
     return AllocHook::inst().posix_memalign(ptr, alignment, size);
 }
 
+// 程序初始化时会调用 mmap, 类的构造函数如果包含内存申请，可能也会调用 mmap
 void* mmap(void* addr, size_t size, int prot, int flags, int fd, off_t offset) {
-    // 程序初始化、类实例化时，会调用 mmap
-    if (before_main) {
+    if (befor_main) {
         return (void*)syscall(SYS_mmap, addr, size, prot, flags, fd, offset);
     }
     return AllocHook::inst().mmap(addr, size, prot, flags, fd, offset);
 }
 
 int munmap(void* addr, size_t size) {
-    if (before_main) {
+    if (befor_main) {
         return (int)syscall(SYS_munmap, addr, size);
     }
     return AllocHook::inst().munmap(addr, size);
