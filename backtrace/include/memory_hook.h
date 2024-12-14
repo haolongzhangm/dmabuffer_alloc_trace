@@ -12,5 +12,4 @@ extern void* (*m_sys_mmap)(
         void* addr, size_t size, int prot, int flags, int fd, off_t offset);
 extern int (*m_sys_munmap)(void* addr, size_t size);
 
-
 void init_hook();

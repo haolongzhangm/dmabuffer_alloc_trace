@@ -1,5 +1,5 @@
-#include <fcntl.h>
 #include <dlfcn.h>
+#include <fcntl.h>
 #include <cstdlib>
 
 #include "memory_hook.h"
@@ -14,32 +14,31 @@ void* (*m_sys_mmap)(
         void* addr, size_t size, int prot, int flags, int fd, off_t offset) = nullptr;
 int (*m_sys_munmap)(void* addr, size_t size) = nullptr;
 
-
 void init_hook() {
 #ifdef __OHOS__
-        void* handle = dlopen("libc.so", RTLD_LAZY);
-        if (!handle) {
-            abort();
-        }
+    void* handle = dlopen("libc.so", RTLD_LAZY);
+    if (!handle) {
+        abort();
+    }
 #else
-        void* handle = RTLD_NEXT;
+    void* handle = RTLD_NEXT;
 #endif
 
-#define RESOLVE(name)                                                      \
-        do {                                                               \
-            auto addr = dlsym(handle, #name);                              \
-            if (!addr) {                                                   \
-                abort();                                                   \
-            }                                                              \
-            m_sys_##name = reinterpret_cast<decltype(m_sys_##name)>(addr); \
-        } while (0)
-        RESOLVE(malloc);
-        RESOLVE(free);
-        RESOLVE(calloc);
-        RESOLVE(realloc);
-        RESOLVE(memalign);
-        RESOLVE(posix_memalign);
-        RESOLVE(mmap);
-        RESOLVE(munmap);
+#define RESOLVE(name)                                                  \
+    do {                                                               \
+        auto addr = dlsym(handle, #name);                              \
+        if (!addr) {                                                   \
+            abort();                                                   \
+        }                                                              \
+        m_sys_##name = reinterpret_cast<decltype(m_sys_##name)>(addr); \
+    } while (0)
+    RESOLVE(malloc);
+    RESOLVE(free);
+    RESOLVE(calloc);
+    RESOLVE(realloc);
+    RESOLVE(memalign);
+    RESOLVE(posix_memalign);
+    RESOLVE(mmap);
+    RESOLVE(munmap);
 #undef RESOLVE
 }

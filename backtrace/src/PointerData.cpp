@@ -338,5 +338,6 @@ void PointerData::DumpPeakInfo() {
     printf("\n+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
            "++++++++++++++++\n");
     printf("host peak used: %fMB, dma peak used %fMB, total peak used: %fMB\n\n",
-           peak_host / 1024.0 / 1024.0 , peak_dma / 1024.0 / 1024.0, peak_tot / 1024.0 / 1024.0);
+           peak_host / 1024.0 / 1024.0, peak_dma / 1024.0 / 1024.0,
+           peak_tot / 1024.0 / 1024.0);
 }

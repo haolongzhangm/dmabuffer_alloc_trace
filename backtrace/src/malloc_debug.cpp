@@ -260,7 +260,7 @@ int debug_posix_memalign(void** memptr, size_t alignment, size_t size) {
 namespace DMA_BUF {
 
 int parse_inode(const char* __s) {
-    const char *colon_pos = strchr(__s, ':');
+    const char* colon_pos = strchr(__s, ':');
     int val = 0;
     if (colon_pos != NULL) {
         colon_pos++;
@@ -280,7 +280,7 @@ static bool is_dma_buf(int fd) {
     int inode = -1;
     while (std::getline(file, line)) {
         if (line.find("ino:") == 0) {
-            inode = parse_inode(line.c_str());              
+            inode = parse_inode(line.c_str());
         }
 
         if (line.find("exp_name:") == 0) {
@@ -294,7 +294,7 @@ static bool is_dma_buf(int fd) {
     return false;
 }
 
-}
+}  // namespace DMA_BUF
 
 void* debug_mmap(void* addr, size_t size, int prot, int flags, int fd, off_t offset) {
     if (DebugCallsDisabled() || addr != nullptr) {

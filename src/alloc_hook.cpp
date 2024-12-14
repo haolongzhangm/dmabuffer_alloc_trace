@@ -1,9 +1,9 @@
 #include <sys/syscall.h>
 
-#include "memory_hook.h"
 #include "DebugData.h"
 #include "PointerData.h"
 #include "malloc_debug.h"
+#include "memory_hook.h"
 
 static bool before_main = true;
 void __attribute__((constructor(111))) check(void) {
@@ -13,9 +13,9 @@ void __attribute__((constructor(111))) check(void) {
 class AllocHook {
 public:
     struct InitState {
-        InitState() { 
+        InitState() {
             init_hook();
-            before_init = true; 
+            before_init = true;
         }
         ~InitState() { before_init = false; }
         static bool before_init;
@@ -70,7 +70,7 @@ void* malloc(size_t size) {
 
 void free(void* ptr) {
     if (AllocHook::InitState::before_init) {
-       return m_sys_free(ptr);
+        return m_sys_free(ptr);
     }
     AllocHook::inst().free(ptr);
 }
