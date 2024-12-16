@@ -3,17 +3,34 @@
 #include <unistd.h>
 #include <cstddef>
 
+#include <dlfcn.h>
+#include <fcntl.h>
+
 #include "DebugData.h"
 #include "PointerData.h"
 #include "malloc_debug.h"
 #include "memory_hook.h"
 
+#define RESOLVE(name)                                                              \
+    do {                                                                           \
+        if (m_sys_##name == nullptr) {                                             \
+            void* handle = dlopen("libc.so", RTLD_LAZY);                           \
+            if (handle) {                                                          \
+                auto addr = dlsym(handle, #name);                                  \
+                if (addr) {                                                        \
+                    m_sys_##name = reinterpret_cast<decltype(m_sys_##name)>(addr); \
+                }                                                                  \
+                dlclose(handle);                                                   \
+            }                                                                      \
+        }                                                                          \
+    } while (0)
+
 struct InitState {
     InitState() { allocHook_setup = true; }
     ~InitState() { allocHook_setup = false; }
-    static bool allocHook_setup;
+    static volatile bool allocHook_setup;
 };
-bool InitState::allocHook_setup = false;
+volatile bool InitState::allocHook_setup = false;
 
 class AllocHook {
 public:
@@ -54,65 +71,62 @@ AllocHook& AllocHook::inst() {
     return hook;
 }
 
-static bool befor_main = true;
-void __attribute__((constructor(201))) check(void) {
-    init_hook();
-    befor_main = false;
+static volatile bool in_preinit_phase = true;
+__attribute__((constructor(201))) void mark_init_done() {
+    in_preinit_phase = false;
 }
 
 extern "C" {
 // 程序初始化会间接调用 malloc 和 free
 void* malloc(size_t size) {
-    if (befor_main || InitState::allocHook_setup) {
-        return (void*)syscall(
-                SYS_mmap, 0, PAGE_SIZE, PROT_READ | PROT_WRITE,
-                MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE, -1, 0);
+    RESOLVE(malloc);
+    if (InitState::allocHook_setup) {
+        return m_sys_malloc(size);
     }
     return AllocHook::inst().malloc(size);
 }
 
 void free(void* ptr) {
-    if (befor_main || InitState::allocHook_setup) {
-        syscall(SYS_munmap, ptr, PAGE_SIZE);
-        return;
+    RESOLVE(free);
+    if (InitState::allocHook_setup) {
+        return m_sys_free(ptr);
     }
     return AllocHook::inst().free(ptr);
 }
 
 // calloc 和 realloc 属于用户级函数
 void* calloc(size_t a, size_t b) {
+    RESOLVE(calloc);
     if (InitState::allocHook_setup) {
-        return (void*)syscall(
-                SYS_mmap, 0, PAGE_SIZE, PROT_READ | PROT_WRITE,
-                MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE, -1, 0);
+        return m_sys_calloc(a, b);
     }
     return AllocHook::inst().calloc(a, b);
 }
 
 void* realloc(void* ptr, size_t size) {
+    RESOLVE(realloc);
     if (InitState::allocHook_setup) {
-        return (void*)syscall(
-                SYS_mmap, 0, PAGE_SIZE, PROT_READ | PROT_WRITE,
-                MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE, -1, 0);
+        return m_sys_realloc(ptr, size);
     }
     return AllocHook::inst().realloc(ptr, size);
 }
 
 // 进程初始化 和 debug init 的过程不应该调用 posix_memalign
 int posix_memalign(void** ptr, size_t alignment, size_t size) {
+    RESOLVE(posix_memalign);
     return AllocHook::inst().posix_memalign(ptr, alignment, size);
 }
 
-// 程序初始化时会调用 mmap, 类的构造函数如果包含内存申请，可能也会调用 mmap
 void* mmap(void* addr, size_t size, int prot, int flags, int fd, off_t offset) {
-    if (befor_main) {
+    if (in_preinit_phase || InitState::allocHook_setup) {
         return (void*)syscall(SYS_mmap, addr, size, prot, flags, fd, offset);
     }
-    return AllocHook::inst().mmap(addr, size, prot, flags, fd, offset);
+    void* result = AllocHook::inst().mmap(addr, size, prot, flags, fd, offset);
+    return result;
 }
 
 int munmap(void* addr, size_t size) {
-    if (befor_main) {
+    if (in_preinit_phase || InitState::allocHook_setup) {
         return (int)syscall(SYS_munmap, addr, size);
     }
     return AllocHook::inst().munmap(addr, size);

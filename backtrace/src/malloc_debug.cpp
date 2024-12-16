@@ -298,7 +298,7 @@ static bool is_dma_buf(int fd) {
 
 void* debug_mmap(void* addr, size_t size, int prot, int flags, int fd, off_t offset) {
     if (DebugCallsDisabled() || addr != nullptr) {
-        return m_sys_mmap(addr, size, prot, flags, fd, offset);
+        return (void*)syscall(SYS_mmap, addr, size, prot, flags, fd, offset);
     }
 
     ScopedConcurrentLock lock;
@@ -309,7 +309,7 @@ void* debug_mmap(void* addr, size_t size, int prot, int flags, int fd, off_t off
         return nullptr;
     }
 
-    void* result = m_sys_mmap(addr, size, prot, flags, fd, offset);
+    void* result = (void*)syscall(SYS_mmap, addr, size, prot, flags, fd, offset);
     if (g_debug->TrackPointers()) {
         if (fd < 0)
             g_debug->pointer->Add(result, size, MMAP);
@@ -322,7 +322,7 @@ void* debug_mmap(void* addr, size_t size, int prot, int flags, int fd, off_t off
 
 int debug_munmap(void* addr, size_t size) {
     if (DebugCallsDisabled()) {
-        return m_sys_munmap(addr, size);
+        return (int)syscall(SYS_munmap, addr, size);
     }
 
     ScopedConcurrentLock lock;
@@ -332,5 +332,5 @@ int debug_munmap(void* addr, size_t size) {
         g_debug->pointer->Remove(addr);
     }
 
-    return m_sys_munmap(addr, size);
+    return (int)syscall(SYS_munmap, addr, size);
 }
