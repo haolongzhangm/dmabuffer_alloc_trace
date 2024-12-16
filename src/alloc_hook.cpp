@@ -113,6 +113,7 @@ void* realloc(void* ptr, size_t size) {
 
 // 进程初始化 和 debug init 的过程不应该调用 posix_memalign
 int posix_memalign(void** ptr, size_t alignment, size_t size) {
+    RESOLVE(memalign);
     RESOLVE(posix_memalign);
     return AllocHook::inst().posix_memalign(ptr, alignment, size);
 }
