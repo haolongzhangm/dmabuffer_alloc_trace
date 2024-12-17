@@ -48,6 +48,7 @@ public:
     int posix_memalign(void** ptr, size_t alignment, size_t size) {
         return debug_posix_memalign(ptr, alignment, size);
     }
+    void* memalign(size_t alignment, size_t bytes) { return debug_memalign(alignment, bytes); }
     void* mmap(void* addr, size_t size, int prot, int flags, int fd, off_t offset) {
         return debug_mmap(addr, size, prot, flags, fd, offset);
     }
@@ -109,6 +110,11 @@ void* realloc(void* ptr, size_t size) {
         return m_sys_realloc(ptr, size);
     }
     return AllocHook::inst().realloc(ptr, size);
+}
+
+void* memalign(size_t alignment, size_t bytes)  {
+    RESOLVE(memalign);
+    return AllocHook::inst().memalign(alignment, bytes);
 }
 
 // 进程初始化 和 debug init 的过程不应该调用 posix_memalign
