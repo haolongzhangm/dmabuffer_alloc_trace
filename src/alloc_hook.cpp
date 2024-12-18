@@ -1,26 +1,39 @@
+#include <sys/mman.h>
 #include <sys/syscall.h>
+#include <unistd.h>
+#include <cstddef>
 
-#include "memory_hook.h"
+#include <dlfcn.h>
+#include <fcntl.h>
+
 #include "DebugData.h"
 #include "PointerData.h"
 #include "malloc_debug.h"
+#include "memory_hook.h"
 
-static bool before_main = true;
-void __attribute__((constructor(111))) check(void) {
-    before_main = false;
-}
+#define RESOLVE(name)                                                              \
+    do {                                                                           \
+        if (m_sys_##name == nullptr) {                                             \
+            void* handle = dlopen("libc.so", RTLD_LAZY);                           \
+            if (handle) {                                                          \
+                auto addr = dlsym(handle, #name);                                  \
+                if (addr) {                                                        \
+                    m_sys_##name = reinterpret_cast<decltype(m_sys_##name)>(addr); \
+                }                                                                  \
+                dlclose(handle);                                                   \
+            }                                                                      \
+        }                                                                          \
+    } while (0)
+
+struct InitState {
+    InitState() { allocHook_setup = true; }
+    ~InitState() { allocHook_setup = false; }
+    static volatile bool allocHook_setup;
+};
+volatile bool InitState::allocHook_setup = false;
 
 class AllocHook {
 public:
-    struct InitState {
-        InitState() { 
-            init_hook();
-            before_init = true; 
-        }
-        ~InitState() { before_init = false; }
-        static bool before_init;
-    };
-
     AllocHook() {
         InitState state;
         void* ptr[2] = {&Db_storage, &Pd_storage};
@@ -35,8 +48,7 @@ public:
     int posix_memalign(void** ptr, size_t alignment, size_t size) {
         return debug_posix_memalign(ptr, alignment, size);
     }
-    int ioctl(int fd, int request, void* arg) { return debug_ioctl(fd, request, arg); }
-    int close(int fd) { return debug_close(fd); }
+    void* memalign(size_t alignment, size_t bytes) { return debug_memalign(alignment, bytes); }
     void* mmap(void* addr, size_t size, int prot, int flags, int fd, off_t offset) {
         return debug_mmap(addr, size, prot, flags, fd, offset);
     }
@@ -54,68 +66,76 @@ private:
 std::aligned_storage<sizeof(DebugData), alignof(DebugData)>::type AllocHook::Db_storage;
 std::aligned_storage<sizeof(PointerData), alignof(PointerData)>::type
         AllocHook::Pd_storage;
-bool AllocHook::InitState::before_init = false;
 
 AllocHook& AllocHook::inst() {
     static AllocHook hook;
     return hook;
 }
 
-extern "C" {
+static volatile bool in_preinit_phase = true;
+__attribute__((constructor(201))) void mark_init_done() {
+    in_preinit_phase = false;
+}
 
+extern "C" {
+// 程序初始化会间接调用 malloc 和 free
 void* malloc(size_t size) {
-    if (AllocHook::InitState::before_init) {
+    RESOLVE(malloc);
+    if (InitState::allocHook_setup) {
         return m_sys_malloc(size);
     }
     return AllocHook::inst().malloc(size);
 }
 
 void free(void* ptr) {
-    if (AllocHook::InitState::before_init) {
-       return m_sys_free(ptr);
+    RESOLVE(free);
+    if (InitState::allocHook_setup) {
+        return m_sys_free(ptr);
     }
-    AllocHook::inst().free(ptr);
+    return AllocHook::inst().free(ptr);
 }
 
+// calloc 和 realloc 属于用户级函数
 void* calloc(size_t a, size_t b) {
+    RESOLVE(calloc);
+    if (InitState::allocHook_setup) {
+        return m_sys_calloc(a, b);
+    }
     return AllocHook::inst().calloc(a, b);
 }
 
 void* realloc(void* ptr, size_t size) {
+    RESOLVE(realloc);
+    if (InitState::allocHook_setup) {
+        return m_sys_realloc(ptr, size);
+    }
     return AllocHook::inst().realloc(ptr, size);
 }
 
+void* memalign(size_t alignment, size_t bytes)  {
+    RESOLVE(memalign);
+    return AllocHook::inst().memalign(alignment, bytes);
+}
+
+// 进程初始化 和 debug init 的过程不应该调用 posix_memalign
 int posix_memalign(void** ptr, size_t alignment, size_t size) {
+    RESOLVE(memalign);
+    RESOLVE(posix_memalign);
     return AllocHook::inst().posix_memalign(ptr, alignment, size);
 }
 
-int ioctl(int fd, int request, ...) {
-    va_list ap;
-    va_start(ap, request);
-    void* arg = va_arg(ap, void*);
-    va_end(ap);
-    if (AllocHook::InitState::before_init) {
-        return m_sys_ioctl(fd, request, arg);
-    }
-    return AllocHook::inst().ioctl(fd, request, arg);
-}
-
-int close(int fd) {
-    if (AllocHook::InitState::before_init) {
-        return m_sys_close(fd);
-    }
-    return AllocHook::inst().close(fd);
-}
-
 void* mmap(void* addr, size_t size, int prot, int flags, int fd, off_t offset) {
-    // 程序初始化、类实例化时，会调用 mmap
-    if (before_main) {
+    if (in_preinit_phase || InitState::allocHook_setup) {
         return (void*)syscall(SYS_mmap, addr, size, prot, flags, fd, offset);
     }
-    return AllocHook::inst().mmap(addr, size, prot, flags, fd, offset);
+    void* result = AllocHook::inst().mmap(addr, size, prot, flags, fd, offset);
+    return result;
 }
 
 int munmap(void* addr, size_t size) {
+    if (in_preinit_phase || InitState::allocHook_setup) {
+        return (int)syscall(SYS_munmap, addr, size);
+    }
     return AllocHook::inst().munmap(addr, size);
 }
 

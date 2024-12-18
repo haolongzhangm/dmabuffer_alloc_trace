@@ -1,10 +1,14 @@
-#include <linux/dma-heap.h>
 #include <signal.h>
 #include <sys/mman.h>
 #include <sys/param.h>  // powerof2 ---> ((((x) - 1) & (x)) == 0)
 #include <unistd.h>
 
 #include <android-base/stringprintf.h>
+#include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <string>
+#include <unordered_set>
 
 #include "Config.h"
 #include "DebugData.h"
@@ -119,7 +123,7 @@ void debug_dump_heap(const char* file_name) {
 static void* InternalMalloc(size_t size) {
     void* result = m_sys_malloc(size);
     if (g_debug->TrackPointers()) {
-        g_debug->pointer->AddHost(result, size);
+        g_debug->pointer->Add(result, size);
     }
 
     return result;
@@ -127,7 +131,7 @@ static void* InternalMalloc(size_t size) {
 
 static void InternalFree(void* pointer) {
     if (g_debug->TrackPointers()) {
-        g_debug->pointer->RemoveHost(pointer);
+        g_debug->pointer->Remove(pointer);
     }
     m_sys_free(pointer);
 }
@@ -182,13 +186,13 @@ void* debug_realloc(void* pointer, size_t bytes) {
     }
 
     if (g_debug->TrackPointers()) {
-        g_debug->pointer->RemoveHost(pointer);
+        g_debug->pointer->Remove(pointer);
     }
 
     void* new_pointer = m_sys_realloc(pointer, bytes);
 
     if (g_debug->TrackPointers()) {
-        g_debug->pointer->AddHost(new_pointer, bytes);
+        g_debug->pointer->Add(new_pointer, bytes);
     }
 
     return new_pointer;
@@ -211,7 +215,7 @@ void* debug_calloc(size_t nmemb, size_t bytes) {
 
     void* pointer = m_sys_calloc(1, size);
     if (pointer != nullptr && g_debug->TrackPointers()) {
-        g_debug->pointer->AddHost(pointer, size);
+        g_debug->pointer->Add(pointer, size);
     }
 
     return pointer;
@@ -233,7 +237,7 @@ void* debug_memalign(size_t alignment, size_t bytes) {
     void* pointer = m_sys_memalign(alignment, bytes);
 
     if (pointer != nullptr && g_debug->TrackPointers()) {
-        g_debug->pointer->AddHost(pointer, bytes);
+        g_debug->pointer->Add(pointer, bytes);
     }
 
     return pointer;
@@ -253,46 +257,48 @@ int debug_posix_memalign(void** memptr, size_t alignment, size_t size) {
     return (*memptr != nullptr) ? 0 : ENOMEM;
 }
 
-int debug_ioctl(int fd, unsigned int request, void* arg) {
-    if (DebugCallsDisabled() || request != DMA_HEAP_IOCTL_ALLOC) {
-        return m_sys_ioctl(fd, request, arg);
+namespace DMA_BUF {
+
+int parse_inode(const char* __s) {
+    const char* colon_pos = strchr(__s, ':');
+    int val = 0;
+    if (colon_pos != NULL) {
+        colon_pos++;
+        val = atoi(colon_pos);
     }
-
-    ScopedConcurrentLock lock;
-    ScopedDisableDebugCalls disable;
-
-    struct dma_heap_allocation_data* heap_data = (struct dma_heap_allocation_data*)arg;
-    if (heap_data->len > PointerInfoType::MaxSize()) {
-        errno = ENOMEM;
-        return -1;
-    }
-
-    int ret = m_sys_ioctl(fd, request, arg);
-    if (g_debug->TrackPointers()) {
-        g_debug->pointer->AddDMA(heap_data->fd, heap_data->len);
-    }
-
-    return ret;
+    return val;
 }
 
-int debug_close(int fd) {
-    if (DebugCallsDisabled() || fd <= 0) {
-        return m_sys_close(fd);
+static bool is_dma_buf(int fd) {
+    std::filesystem::path path = "/proc/self/fdinfo/" + std::to_string(fd);
+    std::ifstream file(path);
+    if (!file.is_open())
+        return false;
+
+    static std::unordered_set<int> inode_set;
+    std::string line;
+    int inode = -1;
+    while (std::getline(file, line)) {
+        if (line.find("ino:") == 0) {
+            inode = parse_inode(line.c_str());
+        }
+
+        if (line.find("exp_name:") == 0) {
+            if (inode_set.count(inode)) {
+                return false;
+            }
+            inode_set.emplace(inode);
+            return true;
+        }
     }
-
-    ScopedConcurrentLock lock;
-    ScopedDisableDebugCalls disable;
-
-    if (g_debug->TrackPointers()) {
-        g_debug->pointer->RemoveDMA(fd);
-    }
-
-    return m_sys_close(fd);
+    return false;
 }
+
+}  // namespace DMA_BUF
 
 void* debug_mmap(void* addr, size_t size, int prot, int flags, int fd, off_t offset) {
-    if (DebugCallsDisabled() || addr != nullptr || fd >= 0) {
-        return m_sys_mmap(addr, size, prot, flags, fd, offset);
+    if (DebugCallsDisabled() || addr != nullptr) {
+        return (void*)syscall(SYS_mmap, addr, size, prot, flags, fd, offset);
     }
 
     ScopedConcurrentLock lock;
@@ -303,9 +309,12 @@ void* debug_mmap(void* addr, size_t size, int prot, int flags, int fd, off_t off
         return nullptr;
     }
 
-    void* result = m_sys_mmap(addr, size, prot, flags, fd, offset);
+    void* result = (void*)syscall(SYS_mmap, addr, size, prot, flags, fd, offset);
     if (g_debug->TrackPointers()) {
-        g_debug->pointer->AddHost(result, size, MMAP);
+        if (fd < 0)
+            g_debug->pointer->Add(result, size, MMAP);
+        else if (DMA_BUF::is_dma_buf(fd))
+            g_debug->pointer->Add(result, size, DMA);
     }
 
     return result;
@@ -313,15 +322,15 @@ void* debug_mmap(void* addr, size_t size, int prot, int flags, int fd, off_t off
 
 int debug_munmap(void* addr, size_t size) {
     if (DebugCallsDisabled()) {
-        return m_sys_munmap(addr, size);
+        return (int)syscall(SYS_munmap, addr, size);
     }
 
     ScopedConcurrentLock lock;
     ScopedDisableDebugCalls disable;
 
     if (g_debug->TrackPointers()) {
-        g_debug->pointer->RemoveHost(addr);
+        g_debug->pointer->Remove(addr);
     }
 
-    return m_sys_munmap(addr, size);
+    return (int)syscall(SYS_munmap, addr, size);
 }

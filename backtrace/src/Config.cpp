@@ -14,7 +14,6 @@ static constexpr const char DEFAULT_BACKTRACE_DUMP_PREFIX[] =
 static bool ParseValue(const char* value, size_t* parsed_value) {
     *parsed_value = 0;
     if (value == nullptr) {
-        printf("Not Set DUMP_PEAK_VALUE_MB\n");
         return false;
     }
     // Parse the value into a size_t value.
@@ -22,25 +21,23 @@ static bool ParseValue(const char* value, size_t* parsed_value) {
     char* end;
     long long_value = strtol(value, &end, 10);
     if (errno != 0) {
-        printf("Error DUMP_PEAK_VALUE_MB:%s:%s\n", value, strerror(errno));
+        printf("Error %s:%s\n", value, strerror(errno));
         return false;
     }
     if (end == value) {
-        printf("Error DUMP_PEAK_VALUE_MB:%s\n", value);
+        printf("Error %s\n", value);
         return false;
     }
     // 指针值相减
     if (static_cast<size_t>(end - value) != strlen(value)) {
-        printf("Error DUMP_PEAK_VALUE_MB:%s\n", value);
+        printf("Error %s\n", value);
         return false;
     }
     if (long_value < 0) {
-        printf("Error DUMP_PEAK_VALUE_MB:%s\n", value);
+        printf("Error %s\n", value);
         return false;
     }
-
-    printf("DUMP_PEAK_VALUE_MB:%zuMB\n", long_value);
-    *parsed_value = static_cast<size_t>(long_value) * 1024 * 1024;
+    *parsed_value = static_cast<size_t>(long_value);
     return true;
 }
 
@@ -52,7 +49,7 @@ bool Config::Init() {
 
     // 如果开启 BACKTRACE_SPECIFIC_SIZES, 请指定内存申请的最大和最小 size
     options_ |= BACKTRACE_SPECIFIC_SIZES;
-    backtrace_min_size_bytes_ = 0;
+    ParseValue(getenv("BACKTRACE_MIN_SIZE"), &backtrace_min_size_bytes_);
     backtrace_max_size_bytes_ = SIZE_MAX;
 
     // 开启 unwind
@@ -64,7 +61,9 @@ bool Config::Init() {
     if (ParseValue(getenv("DUMP_PEAK_VALUE_MB"), &backtrace_dump_peak_val_)) {
         // 记录峰值
         options_ |= RECORD_MEMORY_PEAK;
-        backtrace_min_size_bytes_ = 1024;
+        if (getenv("BACKTRACE_MIN_SIZE") == nullptr) {
+            backtrace_min_size_bytes_ = 1024;
+        }
         backtrace_dump_on_exit_ = true;
     }
 

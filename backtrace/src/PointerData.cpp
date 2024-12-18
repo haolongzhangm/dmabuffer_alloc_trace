@@ -3,6 +3,7 @@
 #include <sys/time.h>
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <cstdio>
 #include <memory>
 #include <mutex>
@@ -46,7 +47,7 @@ bool PointerData::Initialize(const Config& config) {
     return true;
 }
 
-void PointerData::Add(uintptr_t ptr, size_t pointer_size, MemType type) {
+void PointerData::Add(const void* ptr, size_t pointer_size, MemType type) {
     size_t hash_index = 0;
     hash_index = AddBacktrace(g_debug->config().backtrace_frames(), pointer_size);
 
@@ -57,7 +58,7 @@ void PointerData::Add(uintptr_t ptr, size_t pointer_size, MemType type) {
     std::lock_guard<std::mutex> pointer_guard(pointer_mutex_);
     struct timeval tv;
     gettimeofday(&tv, NULL);
-    uintptr_t mangled_ptr = ManglePointer(ptr);
+    uintptr_t mangled_ptr = ManglePointer(reinterpret_cast<uintptr_t>(ptr));
     pointers_[mangled_ptr] = PointerInfoType{pointer_size, hash_index, type, tv};
     current_used += pointer_size;
     size_t* current = (type == DMA) ? &current_dma : &current_host;
@@ -74,66 +75,6 @@ void PointerData::Add(uintptr_t ptr, size_t pointer_size, MemType type) {
             std::lock_guard<std::mutex> frame_guard(frame_mutex_);
             peak_list.clear();
             GetUniqueList(&peak_list, true);
-        }
-    }
-}
-
-void PointerData::AddHost(const void* ptr, size_t pointer_size, MemType type) {
-    Add(reinterpret_cast<uintptr_t>(ptr), pointer_size, type);
-}
-
-void PointerData::AddDMA(const uint32_t ptr, size_t pointer_size, MemType type) {
-    Add(static_cast<uintptr_t>(ptr), pointer_size, type);
-}
-
-void PointerData::Remove(uintptr_t ptr, bool is_dma) {
-    size_t hash_index;
-    {
-        std::lock_guard<std::mutex> pointer_guard(pointer_mutex_);
-        uintptr_t mangled_ptr = ManglePointer((ptr));
-        auto entry = pointers_.find(mangled_ptr);
-        if (entry == pointers_.end()) {
-            // No tracked pointer.
-            return;
-        }
-        current_used -= entry->second.size;
-        size_t* target = is_dma ? &current_dma : &current_host;
-        *target -= entry->second.size;
-        hash_index = entry->second.hash_index;
-        pointers_.erase(mangled_ptr);
-    }
-
-    RemoveBacktrace(hash_index);
-}
-
-void PointerData::RemoveHost(const void* ptr) {
-    Remove(reinterpret_cast<uintptr_t>(ptr), false);
-}
-
-void PointerData::RemoveDMA(const uint32_t ptr) {
-    Remove(static_cast<uintptr_t>(ptr), true);
-}
-
-void PointerData::RemoveBacktrace(size_t hash_index) {
-    if (hash_index <= kBacktraceEmptyIndex) {
-        return;
-    }
-
-    std::lock_guard<std::mutex> frame_guard(frame_mutex_);
-    auto frame_entry = frames_.find(hash_index);
-    if (frame_entry == frames_.end()) {
-        // does not have matching frame data.
-        return;
-    }
-    FrameInfoType* frame_info = &frame_entry->second;
-    if (--frame_info->references == 0) {
-        FrameKeyType key{
-                .num_frames = frame_info->frames.size(),
-                .frames = frame_info->frames.data()};
-        key_to_index_.erase(key);
-        frames_.erase(hash_index);
-        if (g_debug->config().options() & BACKTRACE) {
-            backtraces_info_.erase(hash_index);
         }
     }
 }
@@ -182,6 +123,50 @@ size_t PointerData::AddBacktrace(size_t num_frames, size_t size_bytes) {
         frame_info->references++;
     }
     return hash_index;
+}
+
+void PointerData::Remove(const void* ptr) {
+    size_t hash_index;
+    {
+        std::lock_guard<std::mutex> pointer_guard(pointer_mutex_);
+        uintptr_t mangled_ptr = ManglePointer(reinterpret_cast<uintptr_t>(ptr));
+        auto entry = pointers_.find(mangled_ptr);
+        if (entry == pointers_.end()) {
+            // No tracked pointer.
+            return;
+        }
+        current_used -= entry->second.size;
+        size_t* target = (entry->second.mem_type == DMA) ? &current_dma : &current_host;
+        *target -= entry->second.size;
+        hash_index = entry->second.hash_index;
+        pointers_.erase(mangled_ptr);
+    }
+
+    RemoveBacktrace(hash_index);
+}
+
+void PointerData::RemoveBacktrace(size_t hash_index) {
+    if (hash_index <= kBacktraceEmptyIndex) {
+        return;
+    }
+
+    std::lock_guard<std::mutex> frame_guard(frame_mutex_);
+    auto frame_entry = frames_.find(hash_index);
+    if (frame_entry == frames_.end()) {
+        // does not have matching frame data.
+        return;
+    }
+    FrameInfoType* frame_info = &frame_entry->second;
+    if (--frame_info->references == 0) {
+        FrameKeyType key{
+                .num_frames = frame_info->frames.size(),
+                .frames = frame_info->frames.data()};
+        key_to_index_.erase(key);
+        frames_.erase(hash_index);
+        if (g_debug->config().options() & BACKTRACE) {
+            backtraces_info_.erase(hash_index);
+        }
+    }
 }
 
 void PointerData::GetList(
@@ -276,7 +261,6 @@ void PointerData::DumpLiveToFile(int fd) {
     std::lock_guard<std::mutex> frame_guard(frame_mutex_);
 
     std::vector<ListInfoType> list = std::move(peak_list);
-    ;
     if (!(g_debug->config().options() & RECORD_MEMORY_PEAK)) {
         list.clear();
         // Sort by the time of the allocation.
@@ -353,6 +337,7 @@ void PointerData::DumpPeakInfo() {
     std::lock_guard<std::mutex> pointer_guard(pointer_mutex_);
     printf("\n+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
            "++++++++++++++++\n");
-    printf("host peak used: %zuMB, dma peak used %zuMB, total peak used: %zuMB\n\n",
-           peak_host / 1024 / 1024, peak_dma / 1024 / 1024, peak_tot / 1024 / 1024);
+    printf("host peak used: %fMB, dma peak used %fMB, total peak used: %fMB\n\n",
+           peak_host / 1024.0 / 1024.0, peak_dma / 1024.0 / 1024.0,
+           peak_tot / 1024.0 / 1024.0);
 }

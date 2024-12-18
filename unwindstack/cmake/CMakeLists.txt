@@ -65,4 +65,3 @@ target_include_directories(unwindstack  BEFORE
     PUBLIC ${UNWINDSTACK_ROOT}
     PUBLIC ${UNWINDSTACK_ROOT}/include
 )
-# target_link_libraries(unwindstack lzma)

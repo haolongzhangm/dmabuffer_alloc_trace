@@ -1,11 +1,10 @@
 {
 global:
-    ioctl;
-    close;
     malloc;
     free;
     calloc;
     realloc;
+    memalign;
     posix_memalign;
     mmap;
     munmap;
