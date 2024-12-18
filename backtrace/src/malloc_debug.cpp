@@ -16,6 +16,9 @@
 #include "debug_disable.h"
 #include "malloc_debug.h"
 
+#include "midgard/mali_kbase_ioctl.h"
+#include "msm_ksgl/msm_ksgl.h"
+
 #include "memory_hook.h"
 
 class ScopedConcurrentLock {
@@ -333,4 +336,50 @@ int debug_munmap(void* addr, size_t size) {
     }
 
     return (int)syscall(SYS_munmap, addr, size);
+}
+
+static thread_local bool gpu_ioctl_alloc = false;  // TLS to store a unique flag per thread
+
+int debug_ioctl(int fd, unsigned int request, void* arg) {
+    if (DebugCallsDisabled()) {
+        return (int)syscall(SYS_ioctl, fd, request, arg);
+    }
+
+    ScopedConcurrentLock lock;
+    ScopedDisableDebugCalls disable;
+
+    static std::unordered_set<unsigned int> req_set = {
+        KBASE_IOCTL_MEM_ALLOC_EX,
+        KBASE_IOCTL_MEM_ALLOC,
+        IOCTL_KGSL_GPUOBJ_ALLOC
+    };
+
+    if (req_set.count(request)) {
+        gpu_ioctl_alloc = true;  // Only the calling thread will set this to true
+    }
+
+    return (int)syscall(SYS_ioctl, fd, request, arg);
+}
+
+void* debug_mmap64(void* addr, size_t size, int prot, int flags, int fd, off_t offset) {
+    if (DebugCallsDisabled()) {
+        return (void*)syscall(SYS_mmap, addr, size, prot, flags, fd, offset);
+    }
+
+    ScopedConcurrentLock lock;
+    ScopedDisableDebugCalls disable;
+
+    if (size > PointerInfoType::MaxSize()) {
+        errno = ENOMEM;
+        return nullptr;
+    }
+
+    void* result = (void*)syscall(SYS_mmap, addr, size, prot, flags, fd, offset);
+
+    if (g_debug->TrackPointers() && gpu_ioctl_alloc) {
+        gpu_ioctl_alloc = false;  // Reset the flag immediately after processing
+        g_debug->pointer->Add(result, size, DMA);
+    }
+
+    return result;
 }
