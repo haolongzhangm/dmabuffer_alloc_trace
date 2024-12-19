@@ -30,8 +30,10 @@ public:
         pthread_rwlockattr_t attr;
         // Set the attribute so that when a write lock is pending, read locks are no
         // longer granted.
+#if __ANDROID_API__ >= 23
         pthread_rwlockattr_setkind_np(
                 &attr, PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP);
+#endif
         pthread_rwlock_init(&lock_, &attr);
     }
 
