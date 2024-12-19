@@ -14,3 +14,5 @@ void* debug_memalign(size_t alignment, size_t bytes);
 int debug_posix_memalign(void** memptr, size_t alignment, size_t size);
 void* debug_mmap(void* addr, size_t size, int prot, int flags, int fd, off_t offset);
 int debug_munmap(void* addr, size_t size);
+int debug_ioctl(int fd, unsigned int request, void* arg);
+void* debug_mmap64(void* addr, size_t size, int prot, int flags, int fd, off_t offset);

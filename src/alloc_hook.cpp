@@ -53,6 +53,10 @@ public:
         return debug_mmap(addr, size, prot, flags, fd, offset);
     }
     int munmap(void* addr, size_t size) { return debug_munmap(addr, size); }
+    int ioctl(int fd, int request, void* arg) { return debug_ioctl(fd, request, arg); }
+    void* mmap64(void* addr, size_t size, int prot, int flags, int fd, off_t offset) {
+        return debug_mmap64(addr, size, prot, flags, fd, offset);
+    }
 
     void checkpoint(const char* file_name) { return debug_dump_heap(file_name); }
 
@@ -137,6 +141,23 @@ int munmap(void* addr, size_t size) {
         return (int)syscall(SYS_munmap, addr, size);
     }
     return AllocHook::inst().munmap(addr, size);
+}
+
+int ioctl(int fd, int request, ...) {
+    va_list ap;
+    va_start(ap, request);
+    void* arg = va_arg(ap, void*);
+    va_end(ap);
+
+    return AllocHook::inst().ioctl(fd, request, arg);
+}
+
+void* mmap64(void* addr, size_t size, int prot, int flags, int fd, off_t offset) {
+    if (in_preinit_phase || InitState::allocHook_setup) {
+        return (void*)syscall(SYS_mmap, addr, size, prot, flags, fd, offset);
+    }
+    void* result = AllocHook::inst().mmap64(addr, size, prot, flags, fd, offset);
+    return result;
 }
 
 void checkpoint(const char* file_name) {

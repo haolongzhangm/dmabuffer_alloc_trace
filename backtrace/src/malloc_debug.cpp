@@ -16,6 +16,11 @@
 #include "debug_disable.h"
 #include "malloc_debug.h"
 
+#include "ion/ion.h"
+#include "ion/ion_4.19.h"
+#include "midgard/mali_kbase_ioctl.h"
+#include "msm_ksgl/msm_ksgl.h"
+
 #include "memory_hook.h"
 
 class ScopedConcurrentLock {
@@ -27,8 +32,10 @@ public:
         pthread_rwlockattr_t attr;
         // Set the attribute so that when a write lock is pending, read locks are no
         // longer granted.
+#if __ANDROID_API__ >= 23
         pthread_rwlockattr_setkind_np(
                 &attr, PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP);
+#endif
         pthread_rwlock_init(&lock_, &attr);
     }
 
@@ -283,7 +290,7 @@ static bool is_dma_buf(int fd) {
             inode = parse_inode(line.c_str());
         }
 
-        if (line.find("exp_name:") == 0) {
+        if (line.find("exp_name:") == 0 && inode > 0) {
             if (inode_set.count(inode)) {
                 return false;
             }
@@ -295,6 +302,53 @@ static bool is_dma_buf(int fd) {
 }
 
 }  // namespace DMA_BUF
+
+static thread_local bool gpu_ioctl_alloc = false;  // TLS to store a unique flag per thread
+
+int debug_ioctl(int fd, unsigned int request, void* arg) {
+    if (DebugCallsDisabled()) {
+        return (int)syscall(SYS_ioctl, fd, request, arg);
+    }
+
+    ScopedConcurrentLock lock;
+    ScopedDisableDebugCalls disable;
+
+    static std::unordered_set<unsigned int> req_set = {
+        KBASE_IOCTL_MEM_ALLOC_EX,
+        KBASE_IOCTL_MEM_ALLOC,
+        IOCTL_KGSL_GPUOBJ_ALLOC,
+        ION_IOC_NEW_ALLOC
+    };
+
+    if (req_set.count(request)) {
+        gpu_ioctl_alloc = true;  // Only the calling thread will set this to true
+    }
+
+    return (int)syscall(SYS_ioctl, fd, request, arg);
+}
+
+void* debug_mmap64(void* addr, size_t size, int prot, int flags, int fd, off_t offset) {
+    if (DebugCallsDisabled()) {
+        return (void*)syscall(SYS_mmap, addr, size, prot, flags, fd, offset);
+    }
+
+    ScopedConcurrentLock lock;
+    ScopedDisableDebugCalls disable;
+
+    if (size > PointerInfoType::MaxSize()) {
+        errno = ENOMEM;
+        return nullptr;
+    }
+
+    void* result = (void*)syscall(SYS_mmap, addr, size, prot, flags, fd, offset);
+
+    if (g_debug->TrackPointers() && gpu_ioctl_alloc) {
+        gpu_ioctl_alloc = false;  // Reset the flag immediately after processing
+        g_debug->pointer->Add(result, size, DMA);
+    }
+
+    return result;
+}
 
 void* debug_mmap(void* addr, size_t size, int prot, int flags, int fd, off_t offset) {
     if (DebugCallsDisabled() || addr != nullptr) {
@@ -315,6 +369,10 @@ void* debug_mmap(void* addr, size_t size, int prot, int flags, int fd, off_t off
             g_debug->pointer->Add(result, size, MMAP);
         else if (DMA_BUF::is_dma_buf(fd))
             g_debug->pointer->Add(result, size, DMA);
+        else if (gpu_ioctl_alloc) {
+            gpu_ioctl_alloc = false;  // Reset the flag immediately after processing
+            g_debug->pointer->Add(result, size, DMA);
+        }
     }
 
     return result;

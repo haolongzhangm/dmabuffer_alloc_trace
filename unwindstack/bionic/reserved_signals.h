@@ -54,6 +54,7 @@
 #define BIONIC_SIGNAL_RUN_ON_ALL_THREADS (__SIGRTMIN + 8)
 
 #define __SIGRT_RESERVED 9
+#if __ANDROID_API__ >= 28
 static inline __always_inline sigset64_t filter_reserved_signals(sigset64_t sigset, int how) {
   int (*block)(sigset64_t*, int);
   int (*unblock)(sigset64_t*, int);
@@ -85,3 +86,4 @@ static inline __always_inline sigset64_t filter_reserved_signals(sigset64_t sigs
   unblock(&sigset, __SIGRTMIN + 8);
   return sigset;
 }
+#endif

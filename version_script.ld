@@ -8,6 +8,8 @@ global:
     posix_memalign;
     mmap;
     munmap;
+    ioctl;
+    mmap64;
     checkpoint;
 
 local: *;
